@@ -1,0 +1,33 @@
+[package]
+name = "mvsep-gui"
+version = "0.1.7"
+description = "MVSEP GUI - 音乐分离工具"
+authors = ["AntheaLaffy"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "mvsep_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-log = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["multipart", "json", "stream"] }
+tokio = { version = "1", features = ["full"] }
+log = "0.4"
+dirs = "5"
+futures-util = "0.3"
+tokio-util = "0.7"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = "0.12.1"

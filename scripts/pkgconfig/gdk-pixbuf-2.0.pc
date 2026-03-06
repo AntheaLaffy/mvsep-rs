@@ -1,0 +1,14 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+gdk_pixbuf_binarydir=${pcfiledir}/../../.tauri-gdk/2.10.0
+gdk_pixbuf_moduledir=${gdk_pixbuf_binarydir}/loaders
+gdk_pixbuf_cache_file=${gdk_pixbuf_binarydir}/loaders.cache
+
+Name: gdk-pixbuf-2.0
+Description: Local override for AppImage bundling compatibility
+Version: 2.44.4
+Libs: -L${libdir} -lgdk_pixbuf-2.0
+Cflags: -I${includedir}/gdk-pixbuf-2.0

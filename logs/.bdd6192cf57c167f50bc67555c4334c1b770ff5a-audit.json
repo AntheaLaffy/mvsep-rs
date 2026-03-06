@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/home/kisaragi/code/mvsep-rs/logs/.bdd6192cf57c167f50bc67555c4334c1b770ff5a-audit.json",
+    "files": [
+        {
+            "date": 1772840252724,
+            "name": "/home/kisaragi/code/mvsep-rs/logs/error-2026-03-07.log",
+            "hash": "1e9339cb7354001c54372b436cd40b3bde59939b5d3770154dab6b15a669d63b"
+        }
+    ],
+    "hashType": "sha256"
+}
