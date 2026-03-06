@@ -140,6 +140,7 @@
     "fetchLatestInfo": "最新アルゴリズム情報を取得",
     "fetchLatestRunning": "リモートから最新アルゴリズム情報を取得中...",
     "fetchLatestFailed": "最新アルゴリズム情報の取得に失敗しました。ネットワーク、Token、プロキシを確認してください。",
+    "fetchLatestFailedWithConnectionHint": "最新アルゴリズム情報の取得に失敗しました。設定ページで「接続テスト」を実行してから再試行してください。",
     "cacheMissing": "ローカルアルゴリズムキャッシュがありません。先に「最新アルゴリズム情報を取得」を実行してください。",
     "cacheRefreshed": "ローカルキャッシュからアルゴリズム一覧を更新しました。",
     "latestFetched": "最新アルゴリズム情報を取得し、ローカルキャッシュに保存しました。",

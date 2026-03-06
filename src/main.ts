@@ -998,7 +998,7 @@ class App {
         {
           runningMessage: t('algorithm.fetchLatestRunning'),
           successMessage: showNotice ? t('algorithm.latestFetched') : '',
-          errorMessage: t('algorithm.fetchLatestFailed'),
+          errorMessage: t('algorithm.fetchLatestFailedWithConnectionHint'),
         },
         async () => {
           await invoke<FetchLatestAlgorithmInfoResult>('fetch_latest_algorithm_info', {
@@ -1018,8 +1018,7 @@ class App {
     } catch (e) {
       console.error('Failed to fetch latest algorithm info:', e);
       await this.refreshAlgorithmListFromLocal({ render: false, syncSearch: true });
-      const message = this.getErrorMessage(e);
-      this.showTransientNotice(message, 'warn', 3200);
+      this.showTransientNotice(t('algorithm.fetchLatestFailedWithConnectionHint'), 'warn', 3600);
     } finally {
       this.isLoadingAlgorithmDetails = false;
       if (shouldRender) this.render();

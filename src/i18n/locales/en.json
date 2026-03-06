@@ -145,6 +145,7 @@
     "fetchLatestInfo": "Fetch Latest Algorithm Info",
     "fetchLatestRunning": "Fetching latest algorithm info from remote...",
     "fetchLatestFailed": "Failed to fetch latest algorithm info. Check network, token, or proxy.",
+    "fetchLatestFailedWithConnectionHint": "Failed to fetch latest algorithm info. Go to Settings and click Test Connection, then try again.",
     "cacheMissing": "Local algorithm cache is missing. Please click Fetch Latest Algorithm Info first.",
     "cacheRefreshed": "Algorithm list refreshed from local cache.",
     "latestFetched": "Latest algorithm info fetched and written to local cache.",

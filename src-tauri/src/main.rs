@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
+#[cfg(windows)]
+use std::os::windows::process::ExitStatusExt;
+use std::process::{Command, ExitStatus, Output};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -162,6 +166,15 @@ fn ensure_config_dir() -> std::io::Result<()> {
     Ok(())
 }
 
+fn ensure_parent_dir(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    Ok(())
+}
+
 fn get_algorithm_cache_path() -> PathBuf {
     get_config_path()
         .parent()
@@ -306,6 +319,7 @@ fn load_partial_download_meta(meta_path: &Path) -> Option<PartialDownloadMeta> {
 }
 
 fn save_partial_download_meta(meta_path: &Path, meta: &PartialDownloadMeta) -> Result<(), String> {
+    ensure_parent_dir(meta_path).map_err(|e| e.to_string())?;
     let content = serde_json::to_string_pretty(meta).map_err(|e| e.to_string())?;
     fs::write(meta_path, content).map_err(|e| e.to_string())
 }
@@ -493,6 +507,12 @@ async fn fetch_remote_algorithms_raw(
 
 fn load_algorithm_cache_file() -> Result<AlgorithmCacheFile, String> {
     let path = get_algorithm_cache_path();
+    ensure_config_dir().map_err(|e| e.to_string())?;
+    ensure_parent_dir(&path).map_err(|e| e.to_string())?;
+    if !path.exists() {
+        let initial = serde_json::to_string_pretty(&AlgorithmCacheFile::default()).map_err(|e| e.to_string())?;
+        fs::write(&path, initial).map_err(|e| e.to_string())?;
+    }
     let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
     serde_json::from_str::<AlgorithmCacheFile>(&content).map_err(|e| e.to_string())
 }
@@ -776,11 +796,20 @@ async fn fetch_latest_algorithm_info(
 
     let cli_output = tokio::task::spawn_blocking(move || {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let manifest_path = manifest_dir.join("../Cargo.toml");
+        if !manifest_path.exists() {
+            eprintln!("[backend:WARN] CLI manifest not packaged, skipping");
+            return Ok(Output {
+                status: ExitStatus::from_raw(0),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            });
+        }
         let mut cmd = Command::new("cargo");
         cmd.current_dir(&manifest_dir);
         cmd.arg("run")
             .arg("--manifest-path")
-            .arg("../../Cargo.toml")
+            .arg("../Cargo.toml")
             .arg("--")
             .arg("list")
             .arg("-r")
@@ -866,10 +895,22 @@ async fn fetch_latest_algorithm_info(
 
 #[tauri::command]
 fn refresh_algorithm_list_from_local(state: State<'_, AppState>) -> Result<LocalAlgorithmListResponse, String> {
+    let cache_path = get_algorithm_cache_path();
+    let cache_missing_before = !cache_path.exists();
     let cache = load_algorithm_cache_file().map_err(|e| {
         push_backend_log(&state, "ERROR", format!("refresh_algorithm_list_from_local failed: {}", e));
         e
     })?;
+    if cache_missing_before {
+        push_backend_log(
+            &state,
+            "INFO",
+            format!(
+                "refresh_algorithm_list_from_local initialized missing cache file: {}",
+                cache_path.to_string_lossy()
+            ),
+        );
+    }
     let total_algorithms = get_total_algorithms(&cache.groups);
     push_backend_log(
         &state,
@@ -888,10 +929,22 @@ fn get_algorithm_details_from_local(
     state: State<'_, AppState>,
     algorithm_id: i32,
 ) -> Result<AlgorithmDetails, String> {
+    let cache_path = get_algorithm_cache_path();
+    let cache_missing_before = !cache_path.exists();
     let cache = load_algorithm_cache_file().map_err(|e| {
         push_backend_log(&state, "ERROR", format!("get_algorithm_details_from_local cache read failed: {}", e));
         e
     })?;
+    if cache_missing_before {
+        push_backend_log(
+            &state,
+            "INFO",
+            format!(
+                "get_algorithm_details_from_local initialized missing cache file: {}",
+                cache_path.to_string_lossy()
+            ),
+        );
+    }
     if let Some(details) = cache.details_by_id.get(&algorithm_id) {
         return Ok(details.clone());
     }
@@ -1564,6 +1617,8 @@ async fn download_result(
             let output_path = normalized_output_dir.join(&local_file_name);
             let part_path = get_partial_file_path(&output_path);
             let meta_path = get_partial_meta_path(&part_path);
+            ensure_parent_dir(&part_path).map_err(|e| e.to_string())?;
+            ensure_parent_dir(&meta_path).map_err(|e| e.to_string())?;
 
             let mut resume_from: u64 = 0;
             if let Ok(metadata) = fs::metadata(&part_path) {
@@ -1815,11 +1870,11 @@ fn main() {
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
-                .level_for("reqwest", log::LevelFilter::Warn)
-                .level_for("reqwest::connect", log::LevelFilter::Warn)
-                .level_for("reqwest::retry", log::LevelFilter::Warn)
-                .level_for("hyper", log::LevelFilter::Warn)
-                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("reqwest", log::LevelFilter::Info)
+                .level_for("reqwest::connect", log::LevelFilter::Info)
+                .level_for("reqwest::retry", log::LevelFilter::Info)
+                .level_for("hyper", log::LevelFilter::Info)
+                .level_for("hyper_util", log::LevelFilter::Info)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir { file_name: Some("mvsep".into()) },
                 ))

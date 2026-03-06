@@ -145,6 +145,7 @@
     "fetchLatestInfo": "获取最新算法信息",
     "fetchLatestRunning": "正在从远端拉取最新算法信息...",
     "fetchLatestFailed": "获取最新算法信息失败，请检查网络、Token 或代理。",
+    "fetchLatestFailedWithConnectionHint": "获取最新算法信息失败，请前往设置页面点击“测试连接”后重试。",
     "cacheMissing": "本地算法缓存不存在，请先点击“获取最新算法信息”。",
     "cacheRefreshed": "已从本地缓存刷新算法列表。",
     "latestFetched": "已获取最新算法信息并写入本地缓存。",
