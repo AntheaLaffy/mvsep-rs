@@ -34,7 +34,11 @@
     "runSucceeded": "One-click run completed and auto download finished.",
     "runFailed": "One-click run failed. Please check logs.",
     "start": "Start Separation",
-    "publishDemo": "Publish to demo page"
+    "publishDemo": "Publish to demo page",
+    "apiKeyGuideTitle": "Set your API Key before first use",
+    "apiKeyGuideDesc": "Task creation will fail without a valid API Key. Go to Settings, fill your API Key, and run Test Connection first.",
+    "apiKeyGuideAction": "Go to Settings",
+    "apiKeyGuideDismiss": "Later"
   },
   "task": {
     "current": "Current Tasks",
@@ -116,6 +120,10 @@
     "saving": "Saving settings...",
     "saved": "Settings saved.",
     "saveFailed": "Failed to save settings.",
+    "autoSaveFailed": "Auto-save failed. Please click Save Settings to retry.",
+    "apiKeyRequired": "Please set your API Key in Settings before testing connection.",
+    "apiKeyRequiredForSubmit": "Please set your API Key in Settings before creating tasks.",
+    "placeholderTokenNotAllowed": "The demo key is placeholder-only. Please use your own API Key.",
     "cache": "Cache",
     "algorithmCachePath": "Algorithm Cache File Path"
   },

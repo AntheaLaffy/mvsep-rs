@@ -63,6 +63,9 @@ export interface DomEventsContext {
   sendDebugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string): Promise<void>;
   getApiUrlByMirror(mirror: string): string;
   handleFileDrop(file: File): void;
+  scheduleSettingsAutoSave(): void;
+  dismissApiKeyGuide(): void;
+  goToApiKeySettings(): void;
 }
 
 export interface TaskServiceContext {

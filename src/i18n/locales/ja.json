@@ -34,7 +34,11 @@
     "runSucceeded": "ワンクリック実行が完了し、自動ダウンロードも完了しました。",
     "runFailed": "ワンクリック実行に失敗しました。ログを確認してください。",
     "start": "分離開始",
-    "publishDemo": "デモページに公開"
+    "publishDemo": "デモページに公開",
+    "apiKeyGuideTitle": "初回利用前に API Key を設定してください",
+    "apiKeyGuideDesc": "有効な API Key がないとタスク作成は失敗します。先に Settings で API Key を入力し、接続テストを実行してください。",
+    "apiKeyGuideAction": "設定へ移動",
+    "apiKeyGuideDismiss": "あとで"
   },
   "task": {
     "current": "現在のタスク",
@@ -109,6 +113,10 @@
     "saving": "設定を保存中...",
     "saved": "設定を保存しました。",
     "saveFailed": "設定の保存に失敗しました。",
+    "autoSaveFailed": "自動保存に失敗しました。「設定を保存」で再試行してください。",
+    "apiKeyRequired": "接続テストの前に、Settings で API Key を設定してください。",
+    "apiKeyRequiredForSubmit": "タスク作成の前に、Settings で API Key を設定してください。",
+    "placeholderTokenNotAllowed": "demo-key はプレースホルダーです。ご自身の API Key を使用してください。",
     "connectionSucceeded": "接続テストに成功しました。",
     "connectionFailed": "接続テストに失敗しました。Token、API URL、プロキシを確認してください。",
     "cache": "キャッシュ",

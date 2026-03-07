@@ -20,3 +20,4 @@ src-tauri/gen/schemas/
 # Rust backup/debug artifacts
 **/*.rs.bk
 *.pdb
+/dist

@@ -77,6 +77,8 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
   if (target.closest('[data-action="test-connection"]')) void app.testConnection();
   if (target.closest('[data-action="choose-output-dir"]')) void app.chooseOutputDir();
   if (target.closest('[data-action="save-settings"]')) void app.saveSettings();
+  if (target.closest('[data-action="dismiss-api-key-guide"]')) app.dismissApiKeyGuide();
+  if (target.closest('[data-action="go-api-key-settings"]')) app.goToApiKeySettings();
   if (target.closest('[data-action="toggle-token-visibility"]')) app.toggleTokenVisibility();
   if (target.closest('[data-action="show-api-help"]')) app.showApiTokenHelp();
 
@@ -254,6 +256,18 @@ export function handleDocumentInput(app: DomEventsContext, e: Event): void {
   if (target.id === 'preset-name-input') {
     app.presetNameInput = target.value;
   }
+
+  if (
+    target.id === 'token-input'
+    || target.id === 'api-url-input'
+    || target.id === 'output-dir-input'
+    || target.id === 'poll-interval-input'
+    || target.id === 'proxy-host-input'
+    || target.id === 'proxy-port-input'
+    || target.id === 'algo-auto-refresh-days-input'
+  ) {
+    app.scheduleSettingsAutoSave();
+  }
 }
 
 export async function handleDocumentChange(app: DomEventsContext, e: Event): Promise<void> {
@@ -313,6 +327,7 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
 
   if (target.id === 'settings-output-format-select' && app.config) {
     app.config.output_format = parseInt(target.value, 10);
+    app.scheduleSettingsAutoSave();
   }
 
   if (target.id === 'mirror-select' && app.config) {
@@ -320,6 +335,7 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
     app.config.api_url = app.getApiUrlByMirror(target.value);
     const apiUrlInput = document.getElementById('api-url-input') as HTMLInputElement | null;
     if (apiUrlInput) apiUrlInput.value = app.config.api_url;
+    app.scheduleSettingsAutoSave();
     app.render();
   }
 

@@ -62,8 +62,10 @@ interface UiStatusBanner {
 }
 
 class App {
-  private readonly defaultApiToken = 'mvsep-demo-key';
+  private readonly placeholderApiToken = 'mvsep-demo-key';
   private readonly defaultAlgorithmAutoRefreshDays = 15;
+  private readonly settingsAutoSaveDebounceMs = 700;
+  private readonly apiKeyGuideDismissStorageKey = 'mvsep_api_key_guide_dismissed_v1';
   private currentPage: string = 'home';
   private config: Config | null = null;
   private tasks: Task[] = [];
@@ -145,6 +147,9 @@ class App {
   private isTokenVisible: boolean = false;
   private activeTasksSaveTimer: number | null = null;
   private readonly activeTasksSaveDebounceMs: number = 500;
+  private settingsAutoSaveTimer: number | null = null;
+  private showApiKeyGuide: boolean = false;
+  private lastAutoSaveErrorAt: number = 0;
   private readonly minPollIntervalSeconds: number = 1;
   private readonly maxPollIntervalSeconds: number = 60;
 
@@ -321,6 +326,143 @@ class App {
       }
     }
     return String(error);
+  }
+
+  private isPlaceholderToken(token: string | null | undefined): boolean {
+    return (token || '').trim() === this.placeholderApiToken;
+  }
+
+  private hasUsableApiToken(): boolean {
+    const token = this.config?.token?.trim() || '';
+    return token.length > 0 && !this.isPlaceholderToken(token);
+  }
+
+  private syncApiKeyGuideVisibility() {
+    if (this.hasUsableApiToken()) {
+      this.showApiKeyGuide = false;
+      return;
+    }
+    this.showApiKeyGuide = readTextStorage(this.apiKeyGuideDismissStorageKey) !== '1';
+  }
+
+  dismissApiKeyGuide() {
+    this.showApiKeyGuide = false;
+    const ok = writeTextStorage(this.apiKeyGuideDismissStorageKey, '1');
+    if (!ok) console.error('Failed to persist API key guide dismissal');
+    this.render();
+  }
+
+  private focusTokenInput() {
+    window.setTimeout(() => {
+      const tokenInput = document.getElementById('token-input') as HTMLInputElement | null;
+      if (!tokenInput) return;
+      tokenInput.focus();
+      tokenInput.select();
+    }, 0);
+  }
+
+  goToApiKeySettings() {
+    this.navigate('settings');
+    this.focusTokenInput();
+    this.setStatusBanner('running', t('settings.apiKeyRequired'), { autoHideMs: 2800, showLogsShortcut: false });
+  }
+
+  private ensureApiReady(action: 'submit' | 'test'): boolean {
+    if (!this.config) return false;
+    const token = this.config.token?.trim() || '';
+    const message = action === 'submit'
+      ? t('settings.apiKeyRequiredForSubmit')
+      : t('settings.apiKeyRequired');
+
+    if (!token) {
+      this.goToApiKeySettings();
+      this.showTransientNotice(message, 'warn', 3600);
+      return false;
+    }
+    if (this.isPlaceholderToken(token)) {
+      this.goToApiKeySettings();
+      this.showTransientNotice(t('settings.placeholderTokenNotAllowed'), 'warn', 3800);
+      return false;
+    }
+    return true;
+  }
+
+  private readSettingsDraftFromDom() {
+    if (!this.config) return null;
+    const tokenInput = document.getElementById('token-input') as HTMLInputElement | null;
+    const apiUrlInput = document.getElementById('api-url-input') as HTMLInputElement | null;
+    const outputDirInput = document.getElementById('output-dir-input') as HTMLInputElement | null;
+    const pollIntervalInput = document.getElementById('poll-interval-input') as HTMLInputElement | null;
+    const proxyModeSelect = document.getElementById('proxy-mode-select') as HTMLSelectElement | null;
+    const proxyHostInput = document.getElementById('proxy-host-input') as HTMLInputElement | null;
+    const proxyPortInput = document.getElementById('proxy-port-input') as HTMLInputElement | null;
+    const mirrorSelect = document.getElementById('mirror-select') as HTMLSelectElement | null;
+    const outputFormatSelect = document.getElementById('settings-output-format-select') as HTMLSelectElement | null;
+    const algorithmAutoRefreshDaysInput = document.getElementById('algo-auto-refresh-days-input') as HTMLInputElement | null;
+
+    if (!tokenInput || !apiUrlInput || !outputDirInput || !pollIntervalInput || !proxyModeSelect
+      || !proxyHostInput || !proxyPortInput || !mirrorSelect || !outputFormatSelect || !algorithmAutoRefreshDaysInput) {
+      return null;
+    }
+
+    const requestedPoll = parseInt(pollIntervalInput.value || '5', 10);
+    const normalizedPoll = this.normalizePollInterval(requestedPoll);
+    const requestedAutoRefreshDays = parseInt(
+      algorithmAutoRefreshDaysInput.value || String(this.defaultAlgorithmAutoRefreshDays),
+      10,
+    );
+    const normalizedAutoRefreshDays = this.normalizeAlgorithmAutoRefreshDays(requestedAutoRefreshDays);
+
+    const nextConfig: Config = {
+      ...this.config,
+      token: tokenInput.value.trim(),
+      api_url: apiUrlInput.value || 'https://mvsep.com',
+      output_dir: outputDirInput.value || './output',
+      poll_interval: normalizedPoll,
+      proxy_mode: proxyModeSelect.value || 'system',
+      proxy_host: proxyHostInput.value || '127.0.0.1',
+      proxy_port: proxyPortInput.value || '7897',
+      mirror: mirrorSelect.value || 'main',
+      output_format: outputFormatSelect.value ? parseInt(outputFormatSelect.value, 10) : 1,
+      algorithm_auto_refresh_days: normalizedAutoRefreshDays,
+    };
+
+    return {
+      nextConfig,
+      pollIntervalInput,
+      algorithmAutoRefreshDaysInput,
+      requestedPoll,
+      normalizedPoll,
+    };
+  }
+
+  scheduleSettingsAutoSave() {
+    if (this.currentPage !== 'settings') return;
+    if (this.settingsAutoSaveTimer !== null) {
+      clearTimeout(this.settingsAutoSaveTimer);
+    }
+    this.settingsAutoSaveTimer = window.setTimeout(() => {
+      this.settingsAutoSaveTimer = null;
+      void this.saveSettingsAuto();
+    }, this.settingsAutoSaveDebounceMs);
+  }
+
+  private async saveSettingsAuto() {
+    const draft = this.readSettingsDraftFromDom();
+    if (!draft) return;
+    this.config = draft.nextConfig;
+    this.selectedFormat = draft.nextConfig.output_format ?? this.selectedFormat;
+    const saved = await this.saveConfig(draft.nextConfig);
+    if (!saved) {
+      const now = Date.now();
+      if (now - this.lastAutoSaveErrorAt > 3000) {
+        this.lastAutoSaveErrorAt = now;
+        this.showTransientNotice(t('settings.autoSaveFailed'), 'warn', 2600);
+      }
+      return;
+    }
+    this.syncApiKeyGuideVisibility();
+    this.render();
   }
 
   private isLocalCacheMissingError(message: string): boolean {
@@ -850,9 +992,7 @@ class App {
   async loadConfig() {
     try {
       this.config = await invoke<Config>('load_config');
-      if (!this.config.token || !this.config.token.trim()) {
-        this.config.token = this.defaultApiToken;
-      }
+      this.config.token = this.config.token?.trim() || '';
       if (this.config.mirror && (!this.config.api_url || this.config.api_url.includes('mvsep.com'))) {
         this.config.api_url = this.getApiUrlByMirror(this.config.mirror);
       }
@@ -861,7 +1001,7 @@ class App {
     } catch (e) {
       console.error('Failed to load config:', e);
       this.config = {
-        token: this.defaultApiToken,
+        token: '',
         api_url: 'https://mvsep.com',
         mirror: 'main',
         proxy_mode: 'system',
@@ -874,6 +1014,7 @@ class App {
       };
       this.selectedFormat = 1;
     }
+    this.syncApiKeyGuideVisibility();
   }
 
   async loadAlgorithmCachePath() {
@@ -885,12 +1026,14 @@ class App {
     }
   }
 
-  async saveConfig(config: Config) {
+  async saveConfig(config: Config): Promise<boolean> {
     try {
       await invoke<void>('save_config', { config } satisfies SaveConfigArgs);
       this.config = config;
+      return true;
     } catch (e) {
       console.error('Failed to save config:', e);
+      return false;
     }
   }
 
@@ -1141,6 +1284,7 @@ class App {
 
   async startSeparation() {
     if (this.isSubmittingTask) return;
+    if (!this.ensureApiReady('submit')) return;
     void this.sendDebugLog('INFO', 'startSeparation requested');
     this.setStatusBanner('running', t('home.createPending'), { showLogsShortcut: false });
     const hash = await this.createTaskFromCurrentSelection('create');
@@ -1154,6 +1298,7 @@ class App {
 
   async runSeparationWorkflow() {
     if (this.isSubmittingTask) return;
+    if (!this.ensureApiReady('submit')) return;
     void this.sendDebugLog('INFO', 'runSeparationWorkflow requested');
     this.setStatusBanner('running', t('home.runPending'), { showLogsShortcut: false });
     const hash = await this.createTaskFromCurrentSelection('run');
@@ -1186,6 +1331,7 @@ class App {
   async createTaskFromCurrentSelection(action: 'create' | 'run'): Promise<string | null> {
     if (this.isSubmittingTask) return null;
     if (!this.selectedFile || !this.config) return null;
+    if (!this.ensureApiReady('submit')) return null;
     if (!this.selectedFile.includes('/') && !this.selectedFile.includes('\\')) {
       alert('Drag-and-drop did not expose file path. Please use file picker.');
       return null;
@@ -1576,6 +1722,7 @@ class App {
           });
           if (!selected || !this.config) return;
           this.config.output_dir = selected as string;
+          this.scheduleSettingsAutoSave();
         },
       );
     } catch (e) {
@@ -1586,7 +1733,13 @@ class App {
   }
 
   async testConnection() {
-    if (!this.config?.token || !this.config?.api_url) return;
+    if (!this.config?.api_url) return;
+    if (!this.ensureApiReady('test')) {
+      this.connectionStatus = 'error';
+      this.connectionStatusText = t('settings.disconnected');
+      this.render();
+      return;
+    }
     this.connectionStatus = 'testing';
     this.connectionStatusText = t('common.loading');
     this.render();
@@ -1615,18 +1768,11 @@ class App {
   }
 
   async saveSettings() {
-    const tokenInput = document.getElementById('token-input') as HTMLInputElement;
-    const apiUrlInput = document.getElementById('api-url-input') as HTMLInputElement;
-    const outputDirInput = document.getElementById('output-dir-input') as HTMLInputElement;
-    const pollIntervalInput = document.getElementById('poll-interval-input') as HTMLInputElement;
-    const proxyModeSelect = document.getElementById('proxy-mode-select') as HTMLSelectElement;
-    const proxyHostInput = document.getElementById('proxy-host-input') as HTMLInputElement;
-    const proxyPortInput = document.getElementById('proxy-port-input') as HTMLInputElement;
-    const mirrorSelect = document.getElementById('mirror-select') as HTMLSelectElement;
-    const outputFormatSelect = document.getElementById('settings-output-format-select') as HTMLSelectElement;
-    const algorithmAutoRefreshDaysInput = document.getElementById('algo-auto-refresh-days-input') as HTMLInputElement;
-
     if (!this.config) return;
+    if (this.settingsAutoSaveTimer !== null) {
+      clearTimeout(this.settingsAutoSaveTimer);
+      this.settingsAutoSaveTimer = null;
+    }
     try {
       await this.withUiAction(
         'settings-save',
@@ -1636,24 +1782,12 @@ class App {
           errorMessage: t('settings.saveFailed'),
         },
         async () => {
-          this.config!.token = tokenInput?.value?.trim() || this.defaultApiToken;
-          this.config!.api_url = apiUrlInput?.value || 'https://mvsep.com';
-          this.config!.output_dir = outputDirInput?.value || './output';
-          const requestedPoll = parseInt(pollIntervalInput?.value || '5', 10);
-          const normalizedPoll = this.normalizePollInterval(requestedPoll);
-          this.config!.poll_interval = normalizedPoll;
-          this.config!.proxy_mode = proxyModeSelect?.value || 'system';
-          this.config!.proxy_host = proxyHostInput?.value || '127.0.0.1';
-          this.config!.proxy_port = proxyPortInput?.value || '7897';
-          this.config!.mirror = mirrorSelect?.value || 'main';
-          this.config!.output_format = outputFormatSelect?.value ? parseInt(outputFormatSelect.value, 10) : 1;
-          const requestedAutoRefreshDays = parseInt(algorithmAutoRefreshDaysInput?.value || String(this.defaultAlgorithmAutoRefreshDays), 10);
-          const normalizedAutoRefreshDays = this.normalizeAlgorithmAutoRefreshDays(requestedAutoRefreshDays);
-          this.config!.algorithm_auto_refresh_days = normalizedAutoRefreshDays;
-          this.selectedFormat = this.config!.output_format ?? this.selectedFormat;
-          if (pollIntervalInput) {
-            pollIntervalInput.value = String(normalizedPoll);
-          }
+          const draft = this.readSettingsDraftFromDom();
+          if (!draft) return;
+          const { nextConfig, pollIntervalInput, algorithmAutoRefreshDaysInput, requestedPoll, normalizedPoll } = draft;
+          this.config = nextConfig;
+          this.selectedFormat = nextConfig.output_format ?? this.selectedFormat;
+          pollIntervalInput.value = String(normalizedPoll);
           if (requestedPoll !== normalizedPoll) {
             this.showTransientNotice(
               `Poll interval adjusted to ${normalizedPoll}s (allowed: ${this.minPollIntervalSeconds}-${this.maxPollIntervalSeconds}s).`,
@@ -1661,14 +1795,13 @@ class App {
               3200,
             );
           }
-          if (algorithmAutoRefreshDaysInput) {
-            algorithmAutoRefreshDaysInput.value = String(normalizedAutoRefreshDays);
-          }
-          await this.saveConfig(this.config!);
+          algorithmAutoRefreshDaysInput.value = String(nextConfig.algorithm_auto_refresh_days ?? this.defaultAlgorithmAutoRefreshDays);
+          await this.saveConfig(nextConfig);
           await this.loadFormats();
+          this.syncApiKeyGuideVisibility();
         },
       );
-      this.showTransientNotice('Settings saved. Click "Fetch Latest Algorithm Info" to update local algorithm cache.', 'info', 3200);
+      this.showTransientNotice(t('settings.saved'), 'info', 2200);
     } catch (e) {
       console.error('Failed to save settings:', e);
     } finally {
@@ -1988,6 +2121,24 @@ class App {
     });
   }
 
+  private renderApiKeyGuide(): string {
+    if (!this.showApiKeyGuide) return '';
+    return `
+      <div class="card border border-amber-200 bg-amber-50">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h3 class="font-semibold text-amber-900">${t('home.apiKeyGuideTitle')}</h3>
+            <p class="text-sm text-amber-800 mt-1">${t('home.apiKeyGuideDesc')}</p>
+            <div class="mt-3 flex gap-2">
+              <button class="btn btn-secondary text-sm" data-action="go-api-key-settings">${t('home.apiKeyGuideAction')}</button>
+              <button class="btn btn-secondary text-sm" data-action="dismiss-api-key-guide">${t('home.apiKeyGuideDismiss')}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   renderHomePage() {
     const selectedFileLabel = this.selectedFile
       ? this.escapeHtml(this.selectedFile.split('/').pop() || this.selectedFile)
@@ -2033,6 +2184,7 @@ class App {
 
     return renderHomePageHtml({
       isInitialLoading: this.isInitialLoading,
+      apiKeyGuideHtml: this.renderApiKeyGuide(),
       selectedFile: this.selectedFile,
       selectedFileLabelEscaped: selectedFileLabel,
       algorithmSelectOptionsHtml,

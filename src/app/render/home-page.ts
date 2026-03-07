@@ -2,6 +2,7 @@ type TranslateFn = (key: string) => string;
 
 interface RenderHomePageArgs {
   isInitialLoading: boolean;
+  apiKeyGuideHtml: string;
   selectedFile: string | null;
   selectedFileLabelEscaped: string;
   algorithmSelectOptionsHtml: string;
@@ -26,6 +27,7 @@ export function renderHomePageHtml(args: RenderHomePageArgs): string {
             <p class="text-sm text-text-secondary">${args.t('home.initialLoadingHint')}</p>
           </div>
         ` : ''}
+        ${args.apiKeyGuideHtml}
         <div class="card">
           <div id="dropzone" class="dropzone" data-action="select-file">
             <div class="text-4xl mb-4">🎶</div>
