@@ -90,17 +90,23 @@ pub struct OutputFormat {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmItem {
+    #[serde(default)]
     pub id: i32,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub group_id: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmGroupData {
+    #[serde(default)]
     pub id: i32,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub algorithms: Vec<AlgorithmItem>,
 }
 
@@ -513,8 +519,42 @@ fn load_algorithm_cache_file() -> Result<AlgorithmCacheFile, String> {
         let initial = serde_json::to_string_pretty(&AlgorithmCacheFile::default()).map_err(|e| e.to_string())?;
         fs::write(&path, initial).map_err(|e| e.to_string())?;
     }
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    serde_json::from_str::<AlgorithmCacheFile>(&content).map_err(|e| e.to_string())
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    match serde_json::from_str::<AlgorithmCacheFile>(&content) {
+        Ok(cache) => Ok(cache),
+        Err(parse_err) => {
+            let parent = path.parent().unwrap_or_else(|| Path::new("."));
+            let backup_name = format!(
+                "algorithms_cache.broken.{}.json",
+                now_timestamp().replace('.', "_")
+            );
+            let backup_path = parent.join(backup_name);
+            if let Err(copy_err) = fs::copy(&path, &backup_path) {
+                eprintln!(
+                    "[backend:WARN] failed to backup broken algorithm cache {} -> {}: {}",
+                    path.to_string_lossy(),
+                    backup_path.to_string_lossy(),
+                    copy_err
+                );
+            } else {
+                eprintln!(
+                    "[backend:WARN] broken algorithm cache backed up: {}",
+                    backup_path.to_string_lossy()
+                );
+            }
+
+            let recovered = AlgorithmCacheFile::default();
+            let recovered_content =
+                serde_json::to_string_pretty(&recovered).map_err(|e| e.to_string())?;
+            fs::write(&path, recovered_content).map_err(|e| e.to_string())?;
+            eprintln!(
+                "[backend:WARN] algorithm cache was invalid and has been recovered: {} ({})",
+                path.to_string_lossy(),
+                parse_err
+            );
+            Ok(recovered)
+        }
+    }
 }
 
 fn save_algorithm_cache_file(cache: &AlgorithmCacheFile) -> Result<(), String> {
@@ -948,6 +988,26 @@ fn get_algorithm_details_from_local(
     if let Some(details) = cache.details_by_id.get(&algorithm_id) {
         return Ok(details.clone());
     }
+
+    for group in &cache.groups {
+        if let Some(item) = group.algorithms.iter().find(|algo| algo.id == algorithm_id) {
+            let fallback = AlgorithmDetails {
+                id: algorithm_id,
+                name: item.name.clone(),
+                fields: Vec::new(),
+            };
+            push_backend_log(
+                &state,
+                "WARN",
+                format!(
+                    "get_algorithm_details_from_local fallback without fields: {}",
+                    algorithm_id
+                ),
+            );
+            return Ok(fallback);
+        }
+    }
+
     push_backend_log(
         &state,
         "ERROR",
@@ -1015,25 +1075,35 @@ async fn list_algorithms(
     push_backend_log(&state, "INFO", format!("list_algorithms grouped result: {} groups", groups.len()));
     serde_json::to_value(groups).map_err(|e| e.to_string())
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmField {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub text: String,
+    #[serde(default)]
     pub options: std::collections::HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlgorithmDetails {
+    #[serde(default)]
     pub id: i32,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub fields: Vec<AlgorithmField>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct AlgorithmCacheFile {
+    #[serde(default)]
     pub updated_at: String,
+    #[serde(default)]
     pub raw_cli_stdout: String,
+    #[serde(default)]
     pub groups: Vec<AlgorithmGroupData>,
+    #[serde(default)]
     pub details_by_id: BTreeMap<i32, AlgorithmDetails>,
 }
 

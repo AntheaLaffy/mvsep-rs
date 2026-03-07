@@ -5,7 +5,7 @@ export function renderAboutPageHtml(t: (key: string) => string): string {
           <div class="text-6xl mb-4">🎵</div>
           <h2 class="text-3xl font-bold text-primary">MVSEP</h2>
           <p class="text-text-secondary mb-4">${t('app.title')}</p>
-          <p class="text-text-muted">Version: 0.1.7</p>
+          <p class="text-text-muted">Version: 1.0.0</p>
           <p class="text-text-muted">Author: 如月风铃</p>
           <p class="text-text-muted">Protocol: APLv2</p>
         </div>

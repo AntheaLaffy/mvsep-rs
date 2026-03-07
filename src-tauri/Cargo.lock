@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "mvsep-gui"
-version = "0.1.7"
+version = "1.0.0"
 dependencies = [
  "ashpd",
  "dirs 5.0.1",

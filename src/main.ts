@@ -329,7 +329,8 @@ class App {
       msg.includes('os error 2')
       || msg.includes('no such file or directory')
       || msg.includes('没有那个文件或目录')
-      || msg.includes('cache')
+      || msg.includes('cannot find the path specified')
+      || msg.includes('系统找不到指定的路径')
     );
   }
 
