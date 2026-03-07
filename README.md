@@ -1,5 +1,7 @@
 # MVSEP GUI (mvsep-rs)
 
+语言 / Languages: 简体中文 | [English](./README.en.md) | [日本語](./README.ja.md)
+
 基于 **Tauri 2 + TypeScript + Rust** 的 MVSEP 桌面客户端，用于音频人声/伴奏分离任务的创建、轮询与结果下载。
 
 - 项目主页: https://github.com/AntheaLaffy/mvsep-rs
