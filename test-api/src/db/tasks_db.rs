@@ -1,3 +1,26 @@
+//! 任务数据库（tasks.db）。
+//!
+//! 独立的 SQLite 数据库，追踪任务生命周期和下载进度。
+//!
+//! ## 任务状态流转
+//!
+//! ```text
+//! uploaded → queued → processing → done
+//!                     → failed
+//!                               → expired（文件过期）
+//! ```
+//!
+//! ## 输出文件追踪
+//!
+//! `output_files` 字段存 JSON，记录每个产物的远程 URL、本地路径、下载状态：
+//!
+//! ```json
+//! [
+//!   {"remote_name":"vocals.flac","url":"https://...","downloaded":true,"local_path":"/out/..."},
+//!   {"remote_name":"other.flac","url":"https://...","downloaded":false,"local_path":null}
+//! ]
+//! ```
+
 use rusqlite::Connection;
 use std::sync::Mutex;
 
