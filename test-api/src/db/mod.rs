@@ -1,5 +1,6 @@
 pub mod migrations;
 pub mod repositories;
+pub mod tasks_db;
 pub mod user_config;
 
 use rusqlite::Connection;

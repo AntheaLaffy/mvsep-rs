@@ -22,6 +22,10 @@ pub fn user_config_path() -> PathBuf {
     data_dir().join("user_config.db")
 }
 
+pub fn tasks_db_path() -> PathBuf {
+    data_dir().join("tasks.db")
+}
+
 pub fn ensure_data_dir() -> anyhow::Result<()> {
     let dir = data_dir();
     if !dir.exists() {

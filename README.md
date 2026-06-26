@@ -17,6 +17,7 @@ MVSep（https://mvsep.com）是一个在线音频分离平台。**mvsep-rs** 是
 │   │   ├── main.rs         # 交互式 CLI（菜单驱动）
 │   │   ├── file_transfer.rs # 文件传输模块（流式上传下载、断点续传）
 │   │   ├── db/             # 数据库层（SQLite）
+│   │   │   ├── tasks_db.rs  # 任务数据库
 │   │   │   ├── migrations.rs
 │   │   │   ├── repositories.rs
 │   │   │   └── user_config.rs
@@ -30,11 +31,80 @@ MVSep（https://mvsep.com）是一个在线音频分离平台。**mvsep-rs** 是
 
 ---
 
-## test-api — CLI 测试工具
+## 三数据库架构
 
-当前 MVP 的核心交付物，提供完整的交互式命令行界面：
+| 数据库 | 位置 | 内容 |
+|--------|------|------|
+| **`mvsep.db`** | 远端缓存 | 算法列表、字段、格式定义、算法-格式关联 |
+| **`tasks.db`** | 任务追踪 | 任务记录、任务历史、下载进度、输出文件清单 |
+| **`user_config.db`** | 用户配置 | Token、代理、输出目录、预设、缓存元数据 |
 
-### 功能
+三者独立，通过 hash / ID 关联。
+
+---
+
+## 预设系统
+
+预设是一组"算法 + 参数 + 格式"的快捷保存，存储在 `user_config.db` 中（JSON 格式）。
+
+### 创建预设
+
+| 入口 | 触发方式 | 说明 |
+|------|---------|------|
+| `[b]` 浏览算法 | 按 `s` | 选算法 ID → 命名保存 |
+| `[3]` 创建任务时 | 按 `s`（上传前） | 自动保存当前全部参数 |
+| `[c]` → `[s]` | 直接按 | 手动输入算法/格式/参数 |
+
+### 加载预设
+
+| 入口 | 触发方式 |
+|------|---------|
+| `[3]` 创建任务时 | 在 `Sep Type ID` 提示处输入 `l` |
+
+### 删除预设
+
+`[c]` → `[d]` → 选择预设名称删除。
+
+---
+
+## 任务数据库（tasks.db）
+
+任务生命周期通过 `tasks.db` 追踪，每条任务记录包含：
+
+```
+hash          — API 返回的唯一标识
+file_name     — 上传的原始文件名
+algorithm_id  — 使用的算法 ID
+format        — 输出格式 ID
+status        — 当前状态（uploaded / queued / processing / done / expired / failed / cancelled）
+output_files  — JSON 数组，记录每个产物文件的下载状态
+```
+
+### 任务状态流转
+
+```
+uploaded → queued → processing → done
+                    → failed
+                              → expired（文件过期不可下载）
+```
+
+### 输出文件追踪
+
+`output_files` 字段存 JSON，记录每个产物的远程 URL、本地路径、下载状态：
+
+```json
+[
+  {"remote_name": "vocals.flac", "url": "https://...", "size": 74290000, "downloaded": true, "local_path": "/output/xxx_vocals.flac"},
+  {"remote_name": "other.flac",  "url": "https://...", "size": 74290000, "downloaded": false, "local_path": null}
+]
+```
+
+- 下载时自动跳过已完成的文件
+- 如果文件被删除但 DB 标记为已下载，会检测到磁盘不存在后重新下载
+
+---
+
+## 功能
 
 | 功能 | 说明 |
 |------|------|
@@ -46,8 +116,11 @@ MVSep（https://mvsep.com）是一个在线音频分离平台。**mvsep-rs** 是
 | **任务管理** | 本地数据库追踪所有任务，按文件粒度跟踪下载状态 |
 | **用户偏好** | Token、代理、输出目录、默认格式等配置管理 |
 | **算法浏览** | 按分组浏览所有算法，标注免费/Premium |
+| **预设系统** | 保存/加载常用算法配置组合 |
 
-### 快速开始
+---
+
+## 快速开始
 
 ```bash
 cd test-api
@@ -60,7 +133,7 @@ cargo run --release
 3. 按 `r` 从 API 拉取算法缓存
 4. 按 `3` 创建第一个分离任务
 
-### 菜单预览
+### 菜单
 
 ```
 [l] Logout
@@ -77,15 +150,6 @@ cargo run --release
 [r] Refresh Algorithm Cache
 [q] Quit
 ```
-
-### 数据库
-
-采用双数据库设计：
-
-| 数据库 | 内容 |
-|--------|------|
-| **`mvsep.db`** | 远端/API 数据（算法、字段、格式定义、算法-格式关联） |
-| **`user_config.db`** | 用户偏好（Token、代理、输出目录、缓存元数据） |
 
 ---
 

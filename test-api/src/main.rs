@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
     utils::paths::ensure_data_dir()?;
     let db_path = utils::paths::db_path();
     let db = db::Database::new(Some(&db_path.to_string_lossy()))?;
+    let tasks_db = db::tasks_db::TasksDatabase::new(None)?;
     let mut app = load_app_config(&db);
 
     // Init default output formats if the table is empty
@@ -72,7 +73,7 @@ fn main() -> anyhow::Result<()> {
     show_status(&app);
 
     loop {
-        run_menu(&mut app, &db)?;
+        run_menu(&mut app, &db, &tasks_db)?;
         println!();
     }
 }
@@ -157,7 +158,7 @@ fn show_status(app: &App) {
     println!("{}", "══════════════════════════════════════════════════".cyan());
 }
 
-fn run_menu(app: &mut App, db: &db::Database) -> anyhow::Result<()> {
+fn run_menu(app: &mut App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
     if app.token_valid {
         println!("  {} Logout", "[l]".yellow());
     } else {
@@ -189,12 +190,12 @@ fn run_menu(app: &mut App, db: &db::Database) -> anyhow::Result<()> {
         "l" | "L" if app.token_valid => cmd_logout(app, db)?,
         "p" | "P" => cmd_proxy_config(app, db)?,
         "c" | "C" => cmd_user_prefs(app, db)?,
-        "3" => cmd_create_task(app, db)?,
-        "t" | "T" => cmd_list_tasks(app, db)?,
-        "o" | "O" => cmd_operate_hash(app, db)?,
+        "3" => cmd_create_task(app, db, tasks_db)?,
+        "t" | "T" => cmd_list_tasks(app, db, tasks_db)?,
+        "o" | "O" => cmd_operate_hash(app, db, tasks_db)?,
         // Hidden shortcuts (still work if typed):
         "s" | "S" => cmd_query_task(app)?,
-        "4" => cmd_cancel_task(app, db)?,
+        "4" => cmd_cancel_task(app, db, tasks_db)?,
         "9" => cmd_user_info(app)?,
         "b" | "B" => cmd_browse_algorithms(db)?,
         "h" | "H" | "?" => cmd_api_reference()?,
@@ -566,7 +567,41 @@ fn cmd_browse_algorithms(db: &db::Database) -> anyhow::Result<()> {
         println!();
     }
 
-    println!("{}", "═══ End ═══".cyan().bold());
+    println!("  {}", "──────────────".dimmed());
+    println!("  {} Save algorithm as preset          {} Back", "[s]".cyan(), "[b]".dimmed());
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        match input.trim().to_lowercase().as_str() {
+            "s" => {
+                let algo_id = prompt_int("Algorithm ID", 0)?;
+                if !algorithms.iter().any(|a| a.id == algo_id) {
+                    println!("❌ Algorithm ID {} not found", algo_id);
+                    continue;
+                }
+                let name = prompt("Preset name", Some(&format!("algo_{}", algo_id)))?;
+                if name.is_empty() { continue; }
+                let fmt = prompt_int("Default format (0-5)", 1)?;
+                let demo = prompt_bool("Default demo mode?", true)?;
+                let preset = PresetData {
+                    name: name.clone(),
+                    algorithm_id: algo_id,
+                    opt1: None, opt2: None, opt3: None,
+                    output_format: fmt, demo,
+                };
+                if save_preset(&name, &preset) {
+                    println!("✅ Preset '{}' saved", name.cyan());
+                } else {
+                    println!("❌ Failed to save preset");
+                }
+            }
+            "b" => break,
+            _ => {}
+        }
+        break;
+    }
     Ok(())
 }
 
@@ -632,8 +667,8 @@ fn cmd_api_reference() -> anyhow::Result<()> {
 }
 
 /// Menu command: list tracked tasks from DB with interactive selection.
-fn cmd_list_tasks(app: &App, db: &db::Database) -> anyhow::Result<()> {
-    let mut tasks = load_tasks_from_db(db)?;
+fn cmd_list_tasks(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+    let mut tasks = load_tasks_from_db(tasks_db)?;
     if tasks.is_empty() {
         println!("  ℹ️ No tasks in database.");
         return Ok(());
@@ -649,14 +684,14 @@ fn cmd_list_tasks(app: &App, db: &db::Database) -> anyhow::Result<()> {
         for h in &pending_hashes {
             print!("    {} ... ", &h[..12.min(h.len())]);
             let _ = io::stdout().flush();
-            if let Err(e) = cmd_poll_task(app, db, h) {
+            if let Err(e) = cmd_poll_task(app, db, tasks_db, h) {
                 println!("{}", e);
             } else {
                 println!("✅");
             }
         }
         // Reload tasks after polling
-        tasks = load_tasks_from_db(db)?;
+        tasks = load_tasks_from_db(tasks_db)?;
         println!();
     }
 
@@ -679,13 +714,13 @@ fn cmd_list_tasks(app: &App, db: &db::Database) -> anyhow::Result<()> {
         }
 
         let task = &tasks[idx - 1];
-        task_detail_menu(app, db, task)?;
+        task_detail_menu(app, db, tasks_db, task)?;
     }
     Ok(())
 }
 
-fn load_tasks_from_db(db: &db::Database) -> anyhow::Result<Vec<db::repositories::TaskRow>> {
-    let conn = match db.conn.lock() {
+fn load_tasks_from_db(tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<Vec<db::repositories::TaskRow>> {
+    let conn = match tasks_db.conn.lock() {
         Ok(c) => c,
         Err(_) => return Ok(vec![]),
     };
@@ -731,10 +766,10 @@ fn print_tasks(tasks: &[db::repositories::TaskRow]) {
     println!("{}", "─────────────────────────".dimmed());
 }
 
-fn task_detail_menu(app: &App, db: &db::Database, task: &db::repositories::TaskRow) -> anyhow::Result<()> {
+fn task_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, task: &db::repositories::TaskRow) -> anyhow::Result<()> {
     loop {
         // Reload task from DB every iteration to pick up poll/cancel changes
-        let current = db.conn.lock().ok()
+        let current = tasks_db.conn.lock().ok()
             .and_then(|conn| db::repositories::get_task_by_hash(&conn, &task.hash).ok().flatten())
             .unwrap_or_else(|| task.clone());
 
@@ -769,9 +804,9 @@ fn task_detail_menu(app: &App, db: &db::Database, task: &db::repositories::TaskR
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         match input.trim().to_lowercase().as_str() {
-            "d" => cmd_download_task(app, &current.hash)?,
-            "p" => cmd_poll_task(app, db, &current.hash)?,
-            "c" => cmd_cancel_single(app, db, &current.hash)?,
+            "d" => cmd_download_task(app, &current.hash, tasks_db)?,
+            "p" => cmd_poll_task(app, db, tasks_db, &current.hash)?,
+            "c" => cmd_cancel_single(app, db, tasks_db, &current.hash)?,
             "b" => break,
             _ => println!("{} Unknown option", "⚠️".yellow()),
         }
@@ -780,7 +815,7 @@ fn task_detail_menu(app: &App, db: &db::Database, task: &db::repositories::TaskR
 }
 
 /// Operate on a task by manually entering its hash.
-fn cmd_operate_hash(app: &App, db: &db::Database) -> anyhow::Result<()> {
+fn cmd_operate_hash(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
     let hash = prompt("Task hash", None)?;
     if hash.is_empty() {
         println!("⚠️ No hash entered");
@@ -790,23 +825,23 @@ fn cmd_operate_hash(app: &App, db: &db::Database) -> anyhow::Result<()> {
     // Auto-poll to refresh status
     print!("  🔄 Polling {} ... ", &hash[..12.min(hash.len())]);
     let _ = io::stdout().flush();
-    let _ = cmd_poll_task(app, db, &hash);
+    let _ = cmd_poll_task(app, db, tasks_db, &hash);
     println!();
 
     // Try to find task in local DB first for better display
-    let task_from_db = db.conn.lock().ok()
+    let task_from_db = tasks_db.conn.lock().ok()
         .and_then(|conn| db::repositories::get_task_by_hash(&conn, &hash).ok().flatten());
 
     if let Some(task) = task_from_db {
-        task_detail_menu(app, db, &task)?;
+        task_detail_menu(app, db, tasks_db, &task)?;
     } else {
-        hash_detail_menu(app, db, &hash)?;
+        hash_detail_menu(app, db, tasks_db, &hash)?;
     }
     Ok(())
 }
 
 /// Detail sub-menu for a manual hash (not in DB).
-fn hash_detail_menu(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<()> {
+fn hash_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
     println!("\n{} {} {}", "── Task".cyan(), hash.cyan(), "──".cyan());
     println!("  (not in local database)");
     loop {
@@ -820,9 +855,9 @@ fn hash_detail_menu(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         match input.trim().to_lowercase().as_str() {
-            "p" => cmd_poll_task(app, db, hash)?,
-            "d" => cmd_download_task(app, hash)?,
-            "c" => cmd_cancel_single(app, db, hash)?,
+            "p" => cmd_poll_task(app, db, tasks_db, hash)?,
+            "d" => cmd_download_task(app, hash, tasks_db)?,
+            "c" => cmd_cancel_single(app, db, tasks_db, hash)?,
             "b" => break,
             _ => println!("{} Unknown option", "⚠️".yellow()),
         }
@@ -830,7 +865,7 @@ fn hash_detail_menu(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<
     Ok(())
 }
 
-fn cmd_poll_task(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<()> {
+fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -874,7 +909,7 @@ fn cmd_poll_task(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<()>
             };
 
             // Sync DB with refined status + phase + progress
-            if let Ok(conn) = db.conn.lock() {
+            if let Ok(conn) = tasks_db.conn.lock() {
                 let _ = conn.execute(
                     "UPDATE tasks SET status = ?1, phase = ?1, progress = ?2 WHERE hash = ?3",
                     rusqlite::params![refined_status, progress, hash],
@@ -937,7 +972,7 @@ fn cmd_poll_task(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<()>
     Ok(())
 }
 
-fn cmd_cancel_single(app: &App, db: &db::Database, hash: &str) -> anyhow::Result<()> {
+fn cmd_cancel_single(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -963,7 +998,7 @@ fn cmd_cancel_single(app: &App, db: &db::Database, hash: &str) -> anyhow::Result
         Ok(resp) => {
             if resp.status().is_success() {
                 println!("✅ Task cancelled");
-                if let Ok(conn) = db.conn.lock() {
+                if let Ok(conn) = tasks_db.conn.lock() {
                     let _ = conn.execute(
                         "UPDATE tasks SET status = 'cancelled', phase = 'cancelled' WHERE hash = ?1",
                         rusqlite::params![hash],
@@ -978,7 +1013,7 @@ fn cmd_cancel_single(app: &App, db: &db::Database, hash: &str) -> anyhow::Result
     Ok(())
 }
 
-fn cmd_download_task(app: &App, hash: &str) -> anyhow::Result<()> {
+fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -1011,13 +1046,9 @@ fn cmd_download_task(app: &App, hash: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Load saved output_files from DB if available, or query API
-    let db_path = utils::paths::db_path();
-    let db_conn = db::Database::new(Some(&db_path.to_string_lossy())).ok();
-    let saved_files = db_conn.as_ref().and_then(|d| {
-        d.conn.lock().ok().and_then(|conn| {
-            db::repositories::get_task_output_files(&conn, hash).ok().flatten()
-        })
+    // Load saved output_files from tasks DB if available, or query API
+    let saved_files = tasks_db.conn.lock().ok().and_then(|conn| {
+        db::repositories::get_task_output_files(&conn, hash).ok().flatten()
     });
 
     let file_items: Vec<serde_json::Value> = if let Some(json_str) = saved_files {
@@ -1089,10 +1120,8 @@ fn cmd_download_task(app: &App, hash: &str) -> anyhow::Result<()> {
     println!("  📥 {} file(s) to download ({} already done)", pending.len(), completed_count);
 
     // Find original filename from task DB for proper naming
-    let original_name = db_conn.as_ref().and_then(|d| {
-        d.conn.lock().ok().and_then(|conn| {
-            db::repositories::get_task_by_hash(&conn, hash).ok().flatten()
-        })
+    let original_name = tasks_db.conn.lock().ok().and_then(|conn| {
+        db::repositories::get_task_by_hash(&conn, hash).ok().flatten()
     }).map(|t| t.file_name).unwrap_or_else(|| "output".to_string());
 
     // Download each pending file with streaming + resume
@@ -1129,21 +1158,19 @@ fn cmd_download_task(app: &App, hash: &str) -> anyhow::Result<()> {
             Ok(()) => {
                 println!("\r  ✅ {} downloaded successfully    ", local_name.cyan());
                 // Update output_files JSON
-                if let Some(ref d) = db_conn {
-                    if let Ok(conn) = d.conn.lock() {
-                        if let Ok(Some(json_str)) = db::repositories::get_task_output_files(&conn, hash) {
-                            if let Ok(mut list) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
-                                for item in list.iter_mut() {
-                                    let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                                    if u == file_url {
-                                        item["downloaded"] = serde_json::Value::Bool(true);
-                                        item["local_path"] = serde_json::Value::String(dest_path.to_string_lossy().to_string());
-                                        break;
-                                    }
+                if let Ok(conn) = tasks_db.conn.lock() {
+                    if let Ok(Some(json_str)) = db::repositories::get_task_output_files(&conn, hash) {
+                        if let Ok(mut list) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                            for item in list.iter_mut() {
+                                let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                                if u == file_url {
+                                    item["downloaded"] = serde_json::Value::Bool(true);
+                                    item["local_path"] = serde_json::Value::String(dest_path.to_string_lossy().to_string());
+                                    break;
                                 }
-                                if let Ok(updated) = serde_json::to_string(&list) {
-                                    let _ = db::repositories::update_task_output_files(&conn, hash, &updated);
-                                }
+                            }
+                            if let Ok(updated) = serde_json::to_string(&list) {
+                                let _ = db::repositories::update_task_output_files(&conn, hash, &updated);
                             }
                         }
                     }
@@ -1288,10 +1315,109 @@ fn save_pref_str(key: &str, value: &str) {
     }
 }
 
+// ── Presets ──
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PresetData {
+    name: String,
+    algorithm_id: i32,
+    opt1: Option<i32>,
+    opt2: Option<i32>,
+    opt3: Option<i32>,
+    output_format: i32,
+    demo: bool,
+}
+
+fn list_presets() -> Vec<PresetData> {
+    let ucfg = match open_user_config() {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+    let entries = match ucfg.get_all_by_prefix("preset:") {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    let mut presets: Vec<PresetData> = entries
+        .iter()
+        .filter_map(|e| serde_json::from_str(&e.value).ok())
+        .collect();
+    presets.sort_by(|a, b| a.name.cmp(&b.name));
+    presets
+}
+
+fn save_preset(name: &str, data: &PresetData) -> bool {
+    if let Ok(ucfg) = open_user_config() {
+        ucfg.set_json(&format!("preset:{}", name), data).is_ok()
+    } else {
+        false
+    }
+}
+
+fn delete_preset(name: &str) -> bool {
+    if let Ok(ucfg) = open_user_config() {
+        ucfg.delete(&format!("preset:{}", name)).unwrap_or(false)
+    } else {
+        false
+    }
+}
+
 fn save_pref_int(key: &str, value: i64) {
     if let Ok(ucfg) = open_user_config() {
         let _ = ucfg.set_int(key, value);
     }
+}
+
+fn cmd_save_preset(app: &App) -> anyhow::Result<()> {
+    let name = prompt("Preset name", None)?;
+    if name.is_empty() {
+        println!("⚠️ No name entered");
+        return Ok(());
+    }
+    let algo = prompt_int("Algorithm ID", 26)?;
+    let fmt = prompt_int("Output Format (0-5)", app.output_format)?;
+    let demo = prompt_bool("Demo mode?", true)?;
+    let opt1 = prompt_int("add_opt1 (-1 to skip)", -1)?;
+    let opt2 = prompt_int("add_opt2 (-1 to skip)", -1)?;
+    let opt3 = prompt_int("add_opt3 (-1 to skip)", -1)?;
+
+    let preset = PresetData {
+        name: name.clone(),
+        algorithm_id: algo,
+        opt1: if opt1 >= 0 { Some(opt1) } else { None },
+        opt2: if opt2 >= 0 { Some(opt2) } else { None },
+        opt3: if opt3 >= 0 { Some(opt3) } else { None },
+        output_format: fmt,
+        demo,
+    };
+    if save_preset(&name, &preset) {
+        println!("✅ Preset '{}' saved", name.cyan());
+    } else {
+        println!("❌ Failed to save preset");
+    }
+    Ok(())
+}
+
+fn cmd_delete_preset() -> anyhow::Result<()> {
+    let presets = list_presets();
+    if presets.is_empty() {
+        println!("  ℹ️ No presets saved");
+        return Ok(());
+    }
+    println!("\n{}", "── Saved Presets ──".yellow());
+    for (i, p) in presets.iter().enumerate() {
+        println!("  {}. {}", i + 1, p.name.cyan());
+    }
+    let idx = prompt_int("Select to delete (0=cancel)", 0)?;
+    if idx < 1 || idx > presets.len() as i32 {
+        return Ok(());
+    }
+    let name = &presets[idx as usize - 1].name;
+    if delete_preset(name) {
+        println!("✅ Preset '{}' deleted", name.cyan());
+    } else {
+        println!("❌ Failed to delete preset");
+    }
+    Ok(())
 }
 
 fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
@@ -1305,6 +1431,9 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
         println!("  {} Auto-Refresh Days: {} days", "[4]".cyan(), "15");
         println!("  {} Premium Mode:      {}", "[5]".cyan(), premium_status);
         println!("  {} Long Filenames:    {}", "[6]".cyan(), fn_status);
+        println!("  {}", "──────────────".dimmed());
+        println!("  {} Save current as preset", "[s]".cyan());
+        println!("  {} Delete a preset", "[d]".cyan());
         println!("  {} Back to main menu", "[b]".dimmed());
         print!("> ");
         io::stdout().flush()?;
@@ -1381,6 +1510,8 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
                 if on { app.long_filenames = true; } else { app.long_filenames = false; }
                 save_pref_int("long_filenames_enabled", if app.long_filenames { 1 } else { 0 });
             }
+            "s" | "S" => cmd_save_preset(app)?,
+            "d" | "D" => cmd_delete_preset()?,
             "b" | "B" => break,
             _ => println!("{} Unknown option", "⚠️".yellow()),
         }
@@ -1412,7 +1543,7 @@ fn format_name(id: i32) -> &'static str {
     }
 }
 
-fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
+fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
     let token = require_token(app)?;
 
     let audio_file = match find_audio_file() {
@@ -1431,9 +1562,41 @@ fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
         .unwrap_or("audio.wav")
         .to_string();
 
-    let sep_type = prompt_int("Sep Type ID", 26)?;
-    let output_format = prompt_int("Output Format (0=MP3,1=WAV16,2=FLAC16,3=M4A,4=WAV32,5=FLAC24)", 1)?;
-    let is_demo = prompt_bool("Demo Mode? (y=free demo, n=real, costs credits)", true)?;
+    // Check for presets first
+    let presets = list_presets();
+    let (mut sep_type, mut output_format, mut is_demo, mut preset_opt1, mut preset_opt2, mut preset_opt3) =
+        (26i32, 1i32, true, None::<i32>, None::<i32>, None::<i32>);
+
+    // Allow loading from preset via 'l' key at the sep_type prompt
+    if !presets.is_empty() {
+        let input = prompt("Sep Type ID (or l=load preset)", Some("26"))?;
+        if input.to_lowercase() == "l" {
+            println!("\n  Saved presets:");
+            for (i, p) in presets.iter().enumerate() {
+                println!("  {}. {} (Algo {})", i + 1, p.name.cyan(), p.algorithm_id);
+            }
+            let idx = prompt_int("Select preset (0=skip)", 0)?;
+            if idx >= 1 && idx <= presets.len() as i32 {
+                let p = &presets[idx as usize - 1];
+                sep_type = p.algorithm_id;
+                output_format = p.output_format;
+                is_demo = p.demo;
+                preset_opt1 = p.opt1;
+                preset_opt2 = p.opt2;
+                preset_opt3 = p.opt3;
+                println!("  ✅ Loaded preset: {} (Algo {}, Format {})", p.name.cyan(), p.algorithm_id, p.output_format);
+                if let Some(o) = p.opt1 { println!("     add_opt1: {}", o); }
+                if let Some(o) = p.opt2 { println!("     add_opt2: {}", o); }
+                if let Some(o) = p.opt3 { println!("     add_opt3: {}", o); }
+            }
+        } else if let Ok(id) = input.parse::<i32>() {
+            sep_type = id;
+        }
+    } else {
+        sep_type = prompt_int("Sep Type ID", sep_type)?;
+    }
+    output_format = prompt_int("Output Format (0=MP3,1=WAV16,2=FLAC16,3=M4A,4=WAV32,5=FLAC24)", output_format)?;
+    is_demo = prompt_bool("Demo Mode? (y=free demo, n=real, costs credits)", is_demo)?;
 
     // Try to load algorithm fields from DB
     let db_path = utils::paths::db_path();
@@ -1442,7 +1605,10 @@ fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
         Err(_) => Vec::new(),
     };
 
-    let (opt1, opt2, opt3) = if fields.is_empty() {
+    let (opt1, opt2, opt3) = if preset_opt1.is_some() || preset_opt2.is_some() || preset_opt3.is_some() {
+        // Options already loaded from preset
+        (preset_opt1, preset_opt2, preset_opt3)
+    } else if fields.is_empty() {
         // No fields cached — suggest refresh
         println!("  ℹ️ Algorithm details not cached (use [r] to refresh from API).");
         println!("     Enter -1 to skip any option.");
@@ -1467,6 +1633,29 @@ fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
     println!("  💾 Output Format ID: {}", output_format);
     println!("  💰 Demo Mode: {}", if is_demo { "Yes (free)".green() } else { "No (costs credits)".yellow() });
     println!("  🌐 Via: {}:{}", app.proxy_host, app.proxy_port);
+    println!("  {}", "──────────────".dimmed());
+    // Allow saving as preset before uploading
+    print!("  (s=save preset, Enter=upload) ");
+    io::stdout().flush()?;
+    let mut key = String::new();
+    io::stdin().read_line(&mut key)?;
+    if key.trim().to_lowercase() == "s" {
+        let name = prompt("Preset name", None)?;
+        if !name.is_empty() {
+            let preset = PresetData {
+                name: name.clone(),
+                algorithm_id: sep_type,
+                opt1, opt2, opt3,
+                output_format,
+                demo: is_demo,
+            };
+            if save_preset(&name, &preset) {
+                println!("  ✅ Preset '{}' saved", name.cyan());
+            } else {
+                println!("  ❌ Failed to save preset");
+            }
+        }
+    }
 
     let client = build_http_client(app)?;
     let url = format!("{}/api/separation/create", app.api_url);
@@ -1532,7 +1721,7 @@ fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
                 download_speed_bps: 0.0,
                 download_percent: 0.0,
             };
-            if let Ok(conn) = db.conn.lock() {
+            if let Ok(conn) = tasks_db.conn.lock() {
                 let _ = db::repositories::insert_task(&conn, &task);
             }
         }
@@ -1541,7 +1730,7 @@ fn cmd_create_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_cancel_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
+fn cmd_cancel_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
     let token = require_token(app)?;
     let hash = prompt("Task hash to cancel", None)?;
     if hash.is_empty() {
@@ -1562,7 +1751,7 @@ fn cmd_cancel_task(app: &App, db: &db::Database) -> anyhow::Result<()> {
             if status.is_success() {
                 println!("✅ Task cancelled ({})", hash.dimmed());
                 // Update local DB
-                if let Ok(conn) = db.conn.lock() {
+                if let Ok(conn) = tasks_db.conn.lock() {
                     let _ = conn.execute(
                         "UPDATE tasks SET status = 'cancelled', phase = 'cancelled' WHERE hash = ?1",
                         rusqlite::params![hash],
