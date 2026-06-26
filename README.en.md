@@ -20,6 +20,24 @@ Save/load algorithm + options combinations as named presets.
 **Load:** `[3]` Create task → type `l` at `Sep Type ID` prompt
 **Delete:** `[c]` → `[d]`
 
+## User Config (user_config.db)
+
+Key-value storage via `UserConfigDB`. All settings in one table:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `token` | string | — | API token |
+| `proxy_mode` | string | `system` | Proxy mode |
+| `proxy_host` | string | `127.0.0.1` | Proxy host |
+| `proxy_port` | string | `7897` | Proxy port |
+| `output_dir` | string | `./output` | Download directory |
+| `output_format` | int | `1` | Default format ID |
+| `premium_enabled` | int | `0` | Premium toggle |
+| `long_filenames_enabled` | int | `0` | Long filenames toggle |
+| `algorithm_last_fetched_at` | int | — | Cache timestamp (Unix) |
+| `algorithm_auto_refresh_days` | int | `15` | Cache expiry days |
+| `preset:{name}` | json | — | Saved presets |
+
 ## CLI Tester
 
 ```bash

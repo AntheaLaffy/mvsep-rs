@@ -104,6 +104,48 @@ uploaded → queued → processing → done
 
 ---
 
+## 用户配置数据库（user_config.db）
+
+基于 KV 存储的 `UserConfigDB`，所有配置项以 key-value 形式存储：
+
+### 配置项清单
+
+| Key | 类型 | 说明 | 默认值 |
+|-----|------|------|--------|
+| `token` | string | API 令牌 | 空 |
+| `proxy_mode` | string | 代理模式（system/manual/none） | `system` |
+| `proxy_host` | string | 代理主机 | `127.0.0.1` |
+| `proxy_port` | string | 代理端口 | `7897` |
+| `output_dir` | string | 下载输出目录 | `./output` |
+| `output_format` | int | 默认输出格式 ID | `1`（WAV 16bit） |
+| `premium_enabled` | int | Premium 模式开关 | `0` |
+| `long_filenames_enabled` | int | 长文件名开关 | `0` |
+| `algorithm_last_fetched_at` | int | 算法缓存最后拉取时间（Unix 时间戳） | 无 |
+| `algorithm_auto_refresh_days` | int | 算法缓存自动刷新天数 | `15` |
+| `preset:{名称}` | json | 用户预设（算法+参数+格式） | — |
+
+### API 方式
+
+```rust
+use mvsep_api_tester::db::user_config::UserConfigDB;
+
+let ucfg = UserConfigDB::new("path/to/user_config.db")?;
+
+// 读写
+ucfg.set_string("token", "xxx")?;
+let token = ucfg.get_string("token")?;
+
+ucfg.set_int("output_format", 2)?;
+let fmt = ucfg.get_int("output_format")?;
+
+// 预设（JSON）
+let preset = serde_json::json!({"name":"vocal","algorithm_id":48});
+ucfg.set_json("preset:my_vocal", &preset)?;
+let loaded: serde_json::Value = ucfg.get_json("preset:my_vocal")?.unwrap();
+```
+
+---
+
 ## 功能
 
 | 功能 | 说明 |
