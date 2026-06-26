@@ -1,171 +1,111 @@
-# MVSEP GUI (mvsep-rs)
+# mvsep-rs
 
-语言 / Languages: 简体中文 | [English](./README.en.md) | [日本語](./README.ja.md)
+> MVSep 后端重构 · MVP 阶段
 
-基于 **Tauri 2 + TypeScript + Rust** 的 MVSEP 桌面客户端，用于音频人声/伴奏分离任务的创建、轮询与结果下载。
+MVSep（https://mvsep.com）是一个在线音频分离平台。**mvsep-rs** 是对其后端 API 交互的 Rust 重构，包含一个独立的 CLI 测试工具（`test-api`）和原有的 Tauri 桌面客户端。
 
-- 项目主页: https://github.com/AntheaLaffy/mvsep-rs
-- MVSEP: https://mvsep.com
+本仓库的目标是：用 Rust 实现 MVSep 完整 API 交互层，包括算法缓存、流式上传下载、断点续传、任务管理等核心能力，为后续前端/桌面端提供可靠的基础库。
 
-## 给普通用户
-
-你不需要安装 Rust/Node，只需下载已经打包好的程序即可。
-
-### 下载安装
-
-- Windows: 下载 `MVSEP-Setup.exe`（或便携版 `MVSEP.exe`）
-- Linux: 下载 `MVSEP.AppImage`（或 `.deb`/`.rpm`，按你提供的包格式）
-- 推荐发布位置: GitHub Releases  
-  `https://github.com/AntheaLaffy/mvsep-rs/releases`
-
-### 首次使用（3 分钟）
-
-1. 打开应用，进入「设置」页面
-2. 填写 API Token（获取地址：`https://mvsep.com/user-api`）
-3. API 地址保持默认 `https://mvsep.com`
-4. 点击「测试连接」
-5. 设置输出目录（分离后的文件保存位置）
-
-### 日常使用流程
-
-1. 在首页拖入音频文件
-2. 选择算法、模型参数和输出格式
-3. 点击「一键运行」  
-   或点击「创建任务」（只创建不自动下载）
-4. 在「任务」页查看进度并下载结果
-
-### 常见问题（用户）
-
-#### 1) 提示连接失败
-
-- 检查 Token 是否正确
-- 检查网络/代理设置
-- 在设置中重新点击「测试连接」
-
-#### 2) 下载中断
-
-再次点击下载即可继续，应用支持断点续传。
-
-#### 3) Linux 无法双击启动 AppImage
-
-先给执行权限后再运行：
-
-```bash
-chmod +x MVSEP.AppImage
-./MVSEP.AppImage
-```
-
-## 功能特性
-
-- 拖拽/选择音频文件并创建分离任务
-- 一键运行（创建任务 -> 轮询状态 -> 自动下载）
-- 任务中心（进行中 / 已完成 / 历史）
-- 实时上传与下载进度（速度、百分比、文件名）
-- 下载中断续传与手动取消下载
-- 算法列表本地缓存与远程刷新
-- 输出格式选择（MP3/WAV/FLAC/M4A 等）
-- 连接测试与代理设置（系统/手动/无代理）
-- 前后端日志查看与导出
-- 多语言界面（中文 / English / 日本語）
-
-## 技术栈
-
-- 前端: Vite + TypeScript + TailwindCSS
-- 桌面壳: Tauri 2
-- 后端: Rust + Tokio + Reqwest
-- 插件: dialog / fs / log / opener / shell
-
-## 环境要求
-
-- Node.js 18+
-- Rust stable（建议通过 `rustup` 安装）
-- Tauri 2 构建依赖（按你的系统安装）
-
-Linux 常见依赖（示例，按发行版调整）：
-
-```bash
-# Debian/Ubuntu 示例
-sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  patchelf
-```
-
-## 给开发者
-
-## 快速开始
-
-```bash
-# 1) 安装前端依赖
-npm install
-
-# 2) 启动桌面开发模式
-npm run tauri dev
-```
-
-首次使用建议在「设置」页完成：
-
-1. 填写 API Token（可从 https://mvsep.com/user-api 获取）
-2. 确认 API 地址（默认 `https://mvsep.com`）
-3. 测试连接
-4. 设置输出目录与代理（如需要）
-
-## 构建与打包
-
-```bash
-# 前端构建
-npm run build
-
-# Tauri 打包（平台默认 bundle）
-npm run tauri build
-
-# Linux AppImage（仓库提供的辅助脚本）
-npm run build:appimage
-```
-
-生成产物一般位于：`src-tauri/target/release/bundle/`。
-
-## 配置与缓存位置
-
-应用会将配置和算法缓存写入系统配置目录下的 `mvsep-gui` 文件夹：
-
-- `config.json`：用户设置（Token、API、代理、输出目录等）
-- `algorithms_cache.json`：算法列表与详情缓存
-
-常见路径：
-
-- Linux: `~/.config/mvsep-gui/`
-- macOS: `~/Library/Application Support/mvsep-gui/`
-- Windows: `%APPDATA%\\mvsep-gui\\`
+---
 
 ## 项目结构
 
-```text
+```
 .
-├── src/                    # 前端（页面渲染、事件、状态）
-├── src-tauri/              # Tauri/Rust 后端与打包配置
-├── scripts/                # 构建辅助脚本
-└── README.md
+├── test-api/              # 📦 API 测试工具（主项目，MVP 阶段）
+│   ├── src/
+│   │   ├── main.rs         # 交互式 CLI（菜单驱动）
+│   │   ├── file_transfer.rs # 文件传输模块（流式上传下载、断点续传）
+│   │   ├── db/             # 数据库层（SQLite）
+│   │   │   ├── migrations.rs
+│   │   │   ├── repositories.rs
+│   │   │   └── user_config.rs
+│   │   └── utils/
+│   └── tests/
+├── src/                   # 🖥️ 原有前端（TypeScript + Vite）
+├── src-tauri/             # 🖥️ 原有 Tauri 桌面客户端（Rust）
+├── doc/                   # 📖 API 参考文档
+└── scripts/               # 构建脚本
 ```
 
-## 常见问题
+---
 
-### 1) 无法获取算法列表 / 连接失败
+## test-api — CLI 测试工具
 
-- 先在「设置」页点击“测试连接”
-- 检查 Token、API 地址是否正确
-- 如在代理网络环境，尝试切换代理模式或填写手动代理
+当前 MVP 的核心交付物，提供完整的交互式命令行界面：
 
-### 2) 下载中断
+### 功能
 
-应用支持断点续传。再次点击下载会尝试从中断位置继续。
+| 功能 | 说明 |
+|------|------|
+| **算法缓存** | 从 API 拉取算法列表和参数选项，本地缓存带过期检查 |
+| **创建任务** | 选择算法、模型参数、输出格式，流式上传带进度显示 |
+| **轮询状态** | 自动/手动轮询，区分排队/分离中/完成/过期/失败 |
+| **断点续传下载** | 流式下载，支持中断恢复，按原文件名重命名产物 |
+| **取消任务** | 取消正在处理的任务 |
+| **任务管理** | 本地数据库追踪所有任务，按文件粒度跟踪下载状态 |
+| **用户偏好** | Token、代理、输出目录、默认格式等配置管理 |
+| **算法浏览** | 按分组浏览所有算法，标注免费/Premium |
 
-### 3) Linux 打包报 GTK/GDK 相关错误
+### 快速开始
 
-优先使用 `npm run build:appimage`，该脚本已包含部分兼容处理（`gdk-pixbuf` 缓存与 `PKG_CONFIG_PATH` 设置）。
+```bash
+cd test-api
+cargo run --release
+```
+
+首次使用：
+1. 按 `2` 设置 API Token（从 https://mvsep.com/user-api 获取）
+2. 按 `p` 配置代理（如需要）
+3. 按 `r` 从 API 拉取算法缓存
+4. 按 `3` 创建第一个分离任务
+
+### 菜单预览
+
+```
+[l] Logout
+[p] Configure Proxy
+[c] User Preferences
+[3] Create Task ⭐
+[t] List Tasks (from DB)
+[o] Operate Task (enter hash)
+──────────────
+[b] Browse Algorithms (from DB)
+[h] API Reference
+[9] Get User Info
+[a] Run All Tests
+[r] Refresh Algorithm Cache
+[q] Quit
+```
+
+### 数据库
+
+采用双数据库设计：
+
+| 数据库 | 内容 |
+|--------|------|
+| **`mvsep.db`** | 远端/API 数据（算法、字段、格式定义、算法-格式关联） |
+| **`user_config.db`** | 用户偏好（Token、代理、输出目录、缓存元数据） |
+
+---
+
+## 技术栈
+
+- **语言**: Rust (edition 2021)
+- **HTTP 客户端**: reqwest（async + blocking）
+- **异步运行时**: tokio
+- **数据库**: SQLite (rusqlite)
+- **桌面壳**: Tauri 2（原有 GUI）
+
+---
+
+## 环境要求
+
+- Rust stable（推荐 `rustup` 安装）
+- SQLite（bundled，无需单独安装）
+
+---
 
 ## 许可证
 
-本仓库包含 Apache License 2.0 许可证文件，详见 [LICENSE](./LICENSE)。
+Apache License 2.0
