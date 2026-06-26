@@ -21,3 +21,12 @@ src-tauri/gen/schemas/
 **/*.rs.bk
 *.pdb
 /dist
+
+# test-api runtime files
+test-api/output/
+test-api/*.db
+test-api/*.db-wal
+test-api/*.db-shm
+test-api/*.part
+test-api/*.part.meta.json
+test-api/algorithms_api_response.json
