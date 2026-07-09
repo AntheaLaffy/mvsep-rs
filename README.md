@@ -7,6 +7,8 @@ MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管�
 [![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
 [![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
 
+语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+
 ## 功能特性
 
 - **三数据库架构**：算法缓存、任务追踪、用户配置独立管理
