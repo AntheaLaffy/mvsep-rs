@@ -32,7 +32,7 @@ dirs = "5"
 futures-util = "0.3"
 tokio-util = "0.7"
 mvsep-api-tester = "0.1.0"
-rusqlite = "0.31"
+rusqlite = { version = "0.31", features = ["bundled"] }
 anyhow = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
