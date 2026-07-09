@@ -76,9 +76,7 @@ class App {
   private formats: OutputFormat[] = [];
   private selectedFile: string | null = null;
   private selectedAlgorithm: number = 49;
-  private selectedOpt1: number | null = null;
-  private selectedOpt2: number | null = null;
-  private selectedOpt3: number | null = null;
+  private selectedAlgorithmOptions: Map<string, number | null> = new Map();
   private selectedFormat: number = 1;
   private isDemo: boolean = false;
   private taskPollingIntervals: Map<string, number> = new Map();
@@ -740,9 +738,9 @@ class App {
       id: `preset_${Date.now()}`,
       name: name.trim(),
       algorithmId: this.selectedAlgorithm,
-      opt1: this.selectedOpt1,
-      opt2: this.selectedOpt2,
-      opt3: this.selectedOpt3,
+      opt1: this.selectedAlgorithmOptions.get('add_opt1') ?? null,
+      opt2: this.selectedAlgorithmOptions.get('add_opt2') ?? null,
+      opt3: this.selectedAlgorithmOptions.get('add_opt3') ?? null,
       formatId: this.selectedFormat,
       demo: this.isDemo,
     };
@@ -752,9 +750,10 @@ class App {
     const preset = this.presets.find(p => p.id === presetId);
     if (!preset) return;
     this.selectedAlgorithm = preset.algorithmId;
-    this.selectedOpt1 = preset.opt1;
-    this.selectedOpt2 = preset.opt2;
-    this.selectedOpt3 = preset.opt3;
+    this.selectedAlgorithmOptions.clear();
+    if (preset.opt1 !== null) this.selectedAlgorithmOptions.set('add_opt1', preset.opt1);
+    if (preset.opt2 !== null) this.selectedAlgorithmOptions.set('add_opt2', preset.opt2);
+    if (preset.opt3 !== null) this.selectedAlgorithmOptions.set('add_opt3', preset.opt3);
     this.selectedFormat = preset.formatId;
     this.isDemo = preset.demo;
     this.render();
@@ -1170,9 +1169,10 @@ class App {
 
     // Refill algorithm and all model options from history
     this.selectedAlgorithm = record.algorithmId;
-    this.selectedOpt1 = record.modelId;
-    this.selectedOpt2 = record.model2Id ?? null;
-    this.selectedOpt3 = record.model3Id ?? null;
+    this.selectedAlgorithmOptions.clear();
+    if (record.modelId !== null) this.selectedAlgorithmOptions.set('add_opt1', record.modelId);
+    if (record.model2Id != null) this.selectedAlgorithmOptions.set('add_opt2', record.model2Id);
+    if (record.model3Id != null) this.selectedAlgorithmOptions.set('add_opt3', record.model3Id);
     this.selectedFormat = record.formatId;
 
     // Navigate to home page
@@ -1358,9 +1358,7 @@ class App {
             const fallback = this.getFirstAvailableAlgorithmId(this.algorithms);
             if (fallback !== null) {
               this.selectedAlgorithm = fallback;
-              this.selectedOpt1 = null;
-              this.selectedOpt2 = null;
-              this.selectedOpt3 = null;
+              this.selectedAlgorithmOptions.clear();
               if (previousAlgorithm !== fallback) {
                 this.showTransientNotice(`Algorithm ${previousAlgorithm} is unavailable. Switched to ${fallback}.`, 'warn', 3200);
               }
@@ -1601,8 +1599,9 @@ class App {
     }
 
     const details = this.algorithmDetails.get(this.selectedAlgorithm);
+    const opt1Value = this.selectedAlgorithmOptions.get('add_opt1');
     const hasOpt1 = details?.fields.some(f => f.name === 'add_opt1');
-    if (hasOpt1 && this.selectedOpt1 === null) {
+    if (hasOpt1 && opt1Value === null) {
       alert('Please select an option for --opt1');
       return null;
     }
@@ -1619,30 +1618,37 @@ class App {
     void this.sendDebugLog('INFO', `createTaskFromCurrentSelection start: action=${action}, algorithm=${this.selectedAlgorithm}`);
     this.render();
 
+    const options: Record<string, number | null> = {};
+    if (details) {
+      for (const field of details.fields) {
+        options[field.name] = this.selectedAlgorithmOptions.get(field.name) ?? null;
+      }
+    }
+
     try {
       const hash = await backendGateway.createTask({
         filePath: this.selectedFile,
         sepType: this.selectedAlgorithm,
-        opt1: this.selectedOpt1,
-        opt2: this.selectedOpt2,
-        opt3: this.selectedOpt3,
+        options,
         outputFormat: this.selectedFormat,
         demo: this.isDemo,
         apiUrl: this.config.api_url,
         token: this.config.token,
       });
 
+      const opt2Value = this.selectedAlgorithmOptions.get('add_opt2') ?? null;
+      const opt3Value = this.selectedAlgorithmOptions.get('add_opt3') ?? null;
       const task: Task = {
         hash,
         file_name: this.selectedFile.split('/').pop() || 'unknown',
         algorithm_id: this.selectedAlgorithm,
         algorithm_name: this.getAlgorithmName(this.selectedAlgorithm),
-        model_id: this.selectedOpt1,
+        model_id: opt1Value ?? null,
         model_name: this.getSelectedModelName(),
-        model2_id: this.selectedOpt2,
-        model2_name: this.getSelectedOptionName('add_opt2', this.selectedOpt2),
-        model3_id: this.selectedOpt3,
-        model3_name: this.getSelectedOptionName('add_opt3', this.selectedOpt3),
+        model2_id: opt2Value,
+        model2_name: this.getSelectedOptionName('add_opt2', opt2Value),
+        model3_id: opt3Value,
+        model3_name: this.getSelectedOptionName('add_opt3', opt3Value),
         format: this.selectedFormat,
         status: 'waiting',
         progress: 0,
@@ -1720,11 +1726,12 @@ class App {
   }
 
   getSelectedModelName(): string | null {
-    if (this.selectedOpt1 === null) return null;
+    const opt1Value = this.selectedAlgorithmOptions.get('add_opt1');
+    if (opt1Value === null) return null;
     const details = this.algorithmDetails.get(this.selectedAlgorithm);
     const opt1Field = details?.fields.find(f => f.name === 'add_opt1');
     if (!opt1Field) return null;
-    return opt1Field.options[String(this.selectedOpt1)] ?? null;
+    return opt1Field.options[String(opt1Value)] ?? null;
   }
 
   normalizeTaskStatus(status: string): string {
@@ -1747,7 +1754,7 @@ class App {
     return this.normalizeTaskStatus(status) === 'done';
   }
 
-  getSelectedOptionName(fieldName: 'add_opt2' | 'add_opt3', value: number | null): string | null {
+  getSelectedOptionName(fieldName: string, value: number | null): string | null {
     if (value === null) return null;
     const details = this.algorithmDetails.get(this.selectedAlgorithm);
     const field = details?.fields.find(f => f.name === fieldName);
@@ -1758,17 +1765,17 @@ class App {
   validateSelectedOptionsForCurrentAlgorithm() {
     const details = this.algorithmDetails.get(this.selectedAlgorithm);
     if (!details) return;
-    const opt1Field = details.fields.find(f => f.name === 'add_opt1');
-    const opt2Field = details.fields.find(f => f.name === 'add_opt2');
-    const opt3Field = details.fields.find(f => f.name === 'add_opt3');
-    if (this.selectedOpt1 !== null && (!opt1Field || !(String(this.selectedOpt1) in opt1Field.options))) {
-      this.selectedOpt1 = null;
-    }
-    if (this.selectedOpt2 !== null && (!opt2Field || !(String(this.selectedOpt2) in opt2Field.options))) {
-      this.selectedOpt2 = null;
-    }
-    if (this.selectedOpt3 !== null && (!opt3Field || !(String(this.selectedOpt3) in opt3Field.options))) {
-      this.selectedOpt3 = null;
+    const validFieldNames = new Set(details.fields.map(f => f.name));
+    for (const [fieldName, value] of this.selectedAlgorithmOptions.entries()) {
+      if (!validFieldNames.has(fieldName)) {
+        this.selectedAlgorithmOptions.delete(fieldName);
+        continue;
+      }
+      if (value === null) continue;
+      const field = details.fields.find(f => f.name === fieldName);
+      if (!field || !(String(value) in field.options)) {
+        this.selectedAlgorithmOptions.set(fieldName, null);
+      }
     }
   }
 
@@ -2484,15 +2491,13 @@ class App {
     let html = '';
 
     for (const field of details.fields) {
-      const fieldId = field.name.replace('add_', ''); // add_opt1 -> opt1
+      const fieldId = field.name.replace('add_', '');
       const options = Object.entries(field.options);
       const label = field.text || field.name;
 
       if (options.length === 0) continue;
 
-      const currentValue = fieldId === 'opt1' ? this.selectedOpt1 :
-                          fieldId === 'opt2' ? this.selectedOpt2 :
-                          this.selectedOpt3;
+      const currentValue = this.selectedAlgorithmOptions.get(field.name) ?? null;
 
       html += `
         <div>
@@ -2500,7 +2505,7 @@ class App {
             ${this.escapeHtml(label)} (--${this.escapeHtml(field.name)})
             ${fieldId === 'opt1' ? '<span class="text-red-500">*</span>' : ''}
           </label>
-          <select class="select" id="${fieldId}-select">
+          <select class="select" id="algo-option-${fieldId}-select">
             <option value="">-- Select --</option>
             ${options.map(([key, value]) => `
               <option value="${this.escapeHtml(key)}" ${currentValue === parseInt(key, 10) ? 'selected' : ''}>

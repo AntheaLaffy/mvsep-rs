@@ -94,9 +94,7 @@ export const backendGateway = {
   createTask(args: {
     filePath: string;
     sepType: number;
-    opt1: number | null;
-    opt2: number | null;
-    opt3: number | null;
+    options: Record<string, number | null>;
     outputFormat: number;
     demo: boolean;
     apiUrl: string | null;

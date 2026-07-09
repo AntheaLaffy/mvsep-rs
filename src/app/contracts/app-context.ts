@@ -8,9 +8,7 @@ export interface DomEventsContext {
   historyPageSize: number;
   expandedAlgorithmId: number | null;
   selectedAlgorithm: number;
-  selectedOpt1: number | null;
-  selectedOpt2: number | null;
-  selectedOpt3: number | null;
+  selectedAlgorithmOptions: Map<string, number | null>;
   selectedFormat: number;
   isDemo: boolean;
   runTimeoutSeconds: number;

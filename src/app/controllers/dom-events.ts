@@ -146,9 +146,7 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
     const idAttr = target.closest('[data-action="use-algorithm"]')?.getAttribute('data-id');
     if (idAttr) {
       app.selectedAlgorithm = parseInt(idAttr, 10);
-      app.selectedOpt1 = null;
-      app.selectedOpt2 = null;
-      app.selectedOpt3 = null;
+      app.selectedAlgorithmOptions.clear();
       app.navigate('home');
       void app.loadAlgorithmDetails(app.selectedAlgorithm).then(() => app.render());
     }
@@ -318,16 +316,16 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
   if (target.id === 'algorithm-select') {
     const value = parseInt(target.value, 10);
     app.selectedAlgorithm = value;
-    app.selectedOpt1 = null;
-    app.selectedOpt2 = null;
-    app.selectedOpt3 = null;
+    app.selectedAlgorithmOptions.clear();
     await app.loadAlgorithmDetails(value);
     app.render();
   }
 
-  if (target.id === 'opt1-select') app.selectedOpt1 = target.value ? parseInt(target.value, 10) : null;
-  if (target.id === 'opt2-select') app.selectedOpt2 = target.value ? parseInt(target.value, 10) : null;
-  if (target.id === 'opt3-select') app.selectedOpt3 = target.value ? parseInt(target.value, 10) : null;
+  if (target.id.startsWith('algo-option-') && target.id.endsWith('-select')) {
+    const fieldId = target.id.slice('algo-option-'.length, -'-select'.length);
+    const fieldName = `add_${fieldId}`;
+    app.selectedAlgorithmOptions.set(fieldName, target.value ? parseInt(target.value, 10) : null);
+  }
   if (target.id === 'format-select') app.selectedFormat = parseInt(target.value, 10);
   if (target.id === 'demo-checkbox') app.isDemo = (target as HTMLInputElement).checked;
 

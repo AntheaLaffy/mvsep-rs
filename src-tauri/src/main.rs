@@ -270,9 +270,7 @@ trait AppBackend {
         window: tauri::Window,
         file_path: String,
         sep_type: i32,
-        opt1: Option<i32>,
-        opt2: Option<i32>,
-        opt3: Option<i32>,
+        options: std::collections::HashMap<String, Option<i32>>,
         output_format: Option<i32>,
         demo: bool,
         api_url: String,
@@ -747,29 +745,6 @@ fn load_output_formats_from_backend_store(state: &AppState) -> Result<Vec<Output
     })
 }
 
-fn algorithm_field_order(name: &str) -> i32 {
-    match name {
-        "add_opt1" => 1,
-        "add_opt2" => 2,
-        "add_opt3" => 3,
-        _ => 99,
-    }
-}
-
-fn is_supported_algorithm_field(name: &str) -> bool {
-    matches!(name, "add_opt1" | "add_opt2" | "add_opt3")
-}
-
-fn algorithm_options_to_json(field: &serde_json::Value) -> String {
-    match field.get("options") {
-        Some(value) if value.is_string() => value.as_str().unwrap_or("{}").to_string(),
-        Some(value) if value.is_object() => {
-            serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
-        }
-        _ => "{}".to_string(),
-    }
-}
-
 fn parse_algorithm_options(options: Option<&str>) -> HashMap<String, String> {
     let mut parsed = HashMap::new();
     let Some(options) = options else {
@@ -817,7 +792,6 @@ fn algorithm_cache_rows_from_values(
             .and_then(|v| v.as_str())
             .unwrap_or("Ungrouped")
             .to_string();
-        let price_coefficient = read_f64(algo.get("price_coefficient")).unwrap_or(1.0);
         let orientation = read_i32(algo.get("orientation")).unwrap_or(0);
 
         groups.entry(group_id).or_insert(group_name);
@@ -825,38 +799,41 @@ fn algorithm_cache_rows_from_values(
             id: algo_id,
             name: algo_name,
             group_id,
-            price_coefficient,
+            price_coefficient: 1.0,
             orientation,
         });
 
         if let Some(fields) = algo.get("algorithm_fields").and_then(|f| f.as_array()) {
             for field in fields {
+                let field_id = read_i32(field.get("id")).unwrap_or(0);
                 let field_name = field
                     .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                if !is_supported_algorithm_field(&field_name) {
-                    continue;
-                }
-                let field_id =
-                    -((algo_id as i64).abs() * 10 + i64::from(algorithm_field_order(&field_name)));
+                let field_text = field
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let field_options = field
+                    .get("options")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("{}")
+                    .to_string();
+                let field_default = field
+                    .get("default_key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
                 field_rows.push(repositories::AlgorithmFieldRow {
-                    id: field_id,
+                    id: field_id as i64,
                     algorithm_id: algo_id,
                     name: field_name,
-                    text: Some(
-                        field
-                            .get("text")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                    ),
-                    options: Some(algorithm_options_to_json(field)),
-                    default_key: field
-                        .get("default_key")
-                        .and_then(|v| v.as_str())
-                        .map(|v| v.to_string()),
+                    text: Some(field_text),
+                    options: Some(field_options),
+                    default_key: Some(field_default),
                 });
             }
         }
@@ -873,8 +850,7 @@ fn algorithm_details_from_rows(
     algo: repositories::AlgorithmRow,
     mut fields: Vec<repositories::AlgorithmFieldRow>,
 ) -> AlgorithmDetails {
-    fields.retain(|field| is_supported_algorithm_field(&field.name));
-    fields.sort_by_key(|field| (algorithm_field_order(&field.name), field.id));
+    fields.sort_by_key(|field| field.id);
     AlgorithmDetails {
         id: algo.id,
         name: algo.name,
@@ -1207,9 +1183,7 @@ impl AppBackend for LegacyMainBackend {
         window: tauri::Window,
         file_path: String,
         sep_type: i32,
-        opt1: Option<i32>,
-        opt2: Option<i32>,
-        opt3: Option<i32>,
+        options: std::collections::HashMap<String, Option<i32>>,
         output_format: Option<i32>,
         demo: bool,
         api_url: String,
@@ -1220,9 +1194,7 @@ impl AppBackend for LegacyMainBackend {
             window,
             file_path,
             sep_type,
-            opt1,
-            opt2,
-            opt3,
+            options,
             output_format,
             demo,
             api_url,
@@ -1589,66 +1561,14 @@ fn build_http_client(state: &AppState) -> Result<reqwest::Client, String> {
     Ok(client)
 }
 
-fn sanitize_file_component(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        let bad = matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*');
-        if bad || ch.is_control() {
-            out.push('_');
-        } else {
-            out.push(ch);
-        }
-    }
-    let trimmed = out.trim().trim_matches('.').trim_matches('_').to_string();
-    if trimmed.is_empty() {
-        "track".to_string()
-    } else {
-        trimmed
-    }
-}
-
-fn split_basename_and_ext(name: &str) -> (String, Option<String>) {
-    let file_name = Path::new(name)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(name);
-    let stem = Path::new(file_name)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("output")
-        .to_string();
-    let ext = Path::new(file_name)
-        .extension()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_string());
-    (stem, ext)
-}
-
 fn build_download_output_name(
     original_file_name: Option<&str>,
     remote_name: &str,
-    used_names: &mut HashMap<String, usize>,
 ) -> String {
     let original_base = original_file_name
         .and_then(|s| Path::new(s).file_name().and_then(|n| n.to_str()))
-        .unwrap_or("input");
-    let (orig_stem_raw, _) = split_basename_and_ext(original_base);
-    let (remote_stem_raw, remote_ext) = split_basename_and_ext(remote_name);
-    let base_stem = sanitize_file_component(&orig_stem_raw);
-    let suffix = sanitize_file_component(&remote_stem_raw);
-    let merged = format!("{}_{}", base_stem, suffix);
-    let key = merged.to_lowercase();
-    let seq = used_names.entry(key).or_insert(0);
-    *seq += 1;
-    let deduped = if *seq > 1 {
-        format!("{}_{}", merged, *seq)
-    } else {
-        merged
-    };
-    match remote_ext {
-        Some(ext) if !ext.is_empty() => format!("{}.{}", deduped, ext),
-        _ => deduped,
-    }
+        .unwrap_or("output");
+    mvsep_api_tester::file_transfer::build_local_name(original_base, remote_name)
 }
 
 async fn parse_json_value(resp: reqwest::Response) -> Result<serde_json::Value, String> {
@@ -1822,18 +1742,50 @@ fn normalize_algorithm_groups_and_details(
 async fn fetch_remote_algorithms_raw(
     state: &AppState,
     api_url: &str,
-    token: &str,
+    _token: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let client = build_http_client(state)?;
-    let body = get_json_with_fallback(
+    let body = get_json_no_token(
         &client,
         api_url,
-        token,
         &["/app/algorithms", "/algorithm_groups"],
         vec![("scopes".to_string(), "single_upload".to_string())],
     )
     .await?;
     Ok(parse_algorithms_from_value(&body))
+}
+
+async fn get_json_no_token(
+    client: &reqwest::Client,
+    api_url: &str,
+    paths: &[&str],
+    extra_query: Vec<(String, String)>,
+) -> Result<serde_json::Value, String> {
+    let mut attempts: Vec<String> = Vec::new();
+
+    for path in paths {
+        let url = build_api_url(api_url, path);
+        let response = client
+            .get(&url)
+            .query(&extra_query)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        let status = response.status();
+        if !status.is_success() {
+            attempts.push(format!("{} -> {}", url, status));
+            continue;
+        }
+        match parse_json_value(response).await {
+            Ok(v) => return Ok(v),
+            Err(err) => attempts.push(format!("{} -> {}", url, err)),
+        }
+    }
+
+    Err(format!(
+        "all candidate endpoints failed: {}",
+        attempts.join(" | ")
+    ))
 }
 
 fn get_total_algorithms(groups: &[AlgorithmGroupData]) -> usize {
@@ -1854,18 +1806,6 @@ fn read_i64(value: Option<&serde_json::Value>) -> Option<i64> {
 
 fn read_i32(value: Option<&serde_json::Value>) -> Option<i32> {
     read_i64(value).map(|value| value as i32)
-}
-
-fn read_f64(value: Option<&serde_json::Value>) -> Option<f64> {
-    if let Some(v) = value {
-        if let Some(n) = v.as_f64() {
-            return Some(n);
-        }
-        if let Some(s) = v.as_str() {
-            return s.parse::<f64>().ok();
-        }
-    }
-    None
 }
 
 fn now_timestamp() -> String {
@@ -2155,9 +2095,7 @@ async fn create_task(
     window: tauri::Window,
     file_path: String,
     sep_type: i32,
-    opt1: Option<i32>,
-    opt2: Option<i32>,
-    opt3: Option<i32>,
+    options: std::collections::HashMap<String, Option<i32>>,
     output_format: Option<i32>,
     demo: bool,
     api_url: String,
@@ -2172,9 +2110,7 @@ async fn create_task(
                 window,
                 file_path,
                 sep_type,
-                opt1,
-                opt2,
-                opt3,
+                options,
                 output_format,
                 demo,
                 api_url,
@@ -2937,9 +2873,7 @@ async fn legacy_create_task(
     window: tauri::Window,
     file_path: String,
     sep_type: i32,
-    opt1: Option<i32>,
-    opt2: Option<i32>,
-    opt3: Option<i32>,
+    options: std::collections::HashMap<String, Option<i32>>,
     output_format: Option<i32>,
     demo: bool,
     api_url: String,
@@ -2965,14 +2899,10 @@ async fn legacy_create_task(
         ("api_token".to_string(), token.clone()),
     ];
 
-    if let Some(o1) = opt1 {
-        fields.push(("add_opt1".to_string(), o1.to_string()));
-    }
-    if let Some(o2) = opt2 {
-        fields.push(("add_opt2".to_string(), o2.to_string()));
-    }
-    if let Some(o3) = opt3 {
-        fields.push(("add_opt3".to_string(), o3.to_string()));
+    for (name, value) in options {
+        if let Some(v) = value {
+            fields.push((name, v.to_string()));
+        }
     }
 
     let file_path_buf = PathBuf::from(&file_path);
@@ -3239,7 +3169,6 @@ async fn legacy_download_result(
                 .with_hash(hash.clone())
                 .with_path(normalized_output_dir.to_string_lossy().into_owned())
         })?;
-        let mut used_names: HashMap<String, usize> = HashMap::new();
         let original_ref = original_file_name.as_deref();
 
         for (i, file_info) in files.iter().enumerate() {
@@ -3274,13 +3203,23 @@ async fn legacy_download_result(
                         .with_path(output_dir.clone())
                 })?;
             let file_name = file_info
-                .get("name")
+                .get("remote_name")
                 .and_then(|v| v.as_str())
                 .or_else(|| file_url.split('/').next_back())
                 .unwrap_or("output.bin");
-            let local_file_name =
-                build_download_output_name(original_ref, file_name, &mut used_names);
+            let local_file_name = build_download_output_name(original_ref, file_name);
             let output_path = normalized_output_dir.join(&local_file_name);
+
+            if output_path.exists() {
+                push_backend_log(
+                    state,
+                    "INFO",
+                    format!("download_result file already exists, skipping: {}", local_file_name),
+                );
+                downloaded.push(output_path.to_string_lossy().to_string());
+                continue;
+            }
+
             let resume_from = file_transfer::get_resume_info(&output_path, file_url);
             if resume_from > 0 {
                 push_backend_log(
