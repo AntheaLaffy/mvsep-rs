@@ -1,5 +1,5 @@
-use rusqlite::{Connection, params};
 use anyhow::Result;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,8 +22,10 @@ impl UserConfigDB {
         Ok(db)
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Self> {
-        let path = format!("{}/user_config.db", 
+        let path = format!(
+            "{}/user_config.db",
             std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
         );
         Self::new(&path)
@@ -63,9 +65,9 @@ impl UserConfigDB {
     }
 
     pub fn get_string(&self, key: &str) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT value FROM user_config WHERE key = ?1"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM user_config WHERE key = ?1")?;
         let mut rows = stmt.query_map(params![key], |row| row.get(0))?;
         match rows.next() {
             Some(result) => Ok(Some(result?)),
@@ -144,17 +146,16 @@ impl UserConfigDB {
     }
 
     pub fn delete(&self, key: &str) -> Result<bool> {
-        let rows_affected = self.conn.execute(
-            "DELETE FROM user_config WHERE key = ?1",
-            params![key],
-        )?;
+        let rows_affected = self
+            .conn
+            .execute("DELETE FROM user_config WHERE key = ?1", params![key])?;
         Ok(rows_affected > 0)
     }
 
     pub fn exists(&self, key: &str) -> Result<bool> {
-        let mut stmt = self.conn.prepare(
-            "SELECT COUNT(*) FROM user_config WHERE key = ?1"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM user_config WHERE key = ?1")?;
         let count: i64 = stmt.query_row(params![key], |row| row.get(0))?;
         Ok(count > 0)
     }
@@ -190,9 +191,9 @@ impl UserConfigDB {
     }
 
     pub fn get_all(&self) -> Result<Vec<UserConfigEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT key, value, value_type, updated_at FROM user_config ORDER BY key"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key, value, value_type, updated_at FROM user_config ORDER BY key")?;
         let rows = stmt.query_map([], |row| {
             Ok(UserConfigEntry {
                 key: row.get(0)?,
@@ -224,7 +225,7 @@ impl UserConfigDB {
     pub fn import_from_json(&self, json_str: &str) -> Result<u64> {
         let entries: Vec<UserConfigEntry> = serde_json::from_str(json_str)?;
         let mut count = 0u64;
-        
+
         for entry in entries {
             self.conn.execute(
                 "INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at) VALUES (?1, ?2, ?3, ?4)",
@@ -232,7 +233,7 @@ impl UserConfigDB {
             )?;
             count += 1;
         }
-        
+
         Ok(count)
     }
 }

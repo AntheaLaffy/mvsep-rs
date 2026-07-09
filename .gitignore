@@ -1,9 +1,11 @@
 # Dependencies
 node_modules/
+node_modules/.vite/
 
 # Frontend build outputs
 dist/
 .vite/
+/dist/
 
 # Logs
 *.log
@@ -20,7 +22,6 @@ src-tauri/gen/schemas/
 # Rust backup/debug artifacts
 **/*.rs.bk
 *.pdb
-/dist
 
 # test-api runtime files
 test-api/output/

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MVSEP Rewrite"
+  short_description: "Drive mvsep-rs backend rewrite batches"
+  default_prompt: "Use $mvsep-rs-rewrite to continue the next mvsep-rs rewrite batch."

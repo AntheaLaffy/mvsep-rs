@@ -1,0 +1,4 @@
+interface:
+  display_name: "MVSEP Writer"
+  short_description: "Implement one mvsep-rs rewrite batch"
+  default_prompt: "Use $mvsep-rs-batch-writer to implement the selected mvsep-rs rewrite batch."

@@ -1,0 +1,126 @@
+# Gradual backend rewrite status.
+# Last initialized: 2026-07-08
+
+project:
+  name: mvsep-rs
+  mission_doc: docs/mission.md
+  architecture_doc: docs/architecture/backend-rewrite.md
+  source_index: docs/INDEX.md
+  resources_doc: RESOURCES.md
+  rewrite_records: rewrite-records/
+  notes: Note.md
+
+status_values:
+  - planned
+  - active
+  - reimplemented
+  - verified
+  - promoted
+  - optimized
+  - blocked
+
+review_roles:
+  behavior_reviewer: "Checks behavior parity and public payload compatibility."
+  error_tracing_reviewer: "Checks structured errors, logs, redaction and diagnostic context."
+  async_ergonomics_reviewer: "Checks non-blocking behavior, cancellation, polling and user/developer ergonomics."
+  data_algorithm_reviewer: "Checks schema, data structures, complexity and benchmarks."
+  rust_style_reviewer: "Checks Rust module shape, ownership, clippy and warnings."
+  frontend_ux_reviewer: "Checks visual polish, accessibility, text overflow and workflow ergonomics."
+
+batches:
+  - id: tauri_command_facade
+    status: verified
+    current_owner: legacy
+    target_owner: facade
+    summary: "Route existing Tauri commands through AppBackend while preserving current behavior."
+    public_interface_policy: "No frontend command or event rename."
+    required_reviews:
+      - behavior_reviewer
+      - rust_style_reviewer
+      - error_tracing_reviewer
+    verification:
+      - "npm run build"
+      - "cd test-api && cargo test"
+      - "contract tests for legacy command payloads"
+    rollback: "Route commands directly to LegacyMainBackend."
+
+  - id: config_and_formats
+    status: verified
+    current_owner: legacy_json
+    target_owner: test_api_db
+    summary: "Move config and output format handling to injected app paths and DB/user_config storage."
+    public_interface_policy: "Keep Config and OutputFormat TypeScript shapes stable."
+    required_reviews:
+      - behavior_reviewer
+      - data_algorithm_reviewer
+      - error_tracing_reviewer
+    verification:
+      - "legacy config import is idempotent"
+      - "settings autosave works"
+      - "formats list matches current UI expectations"
+    rollback: "Read/write legacy config.json again."
+
+  - id: algorithm_cache
+    status: verified
+    current_owner: legacy_json_cache
+    target_owner: test_api_db
+    summary: "Store algorithm groups, algorithms and fields in mvsep.db while preserving frontend payloads."
+    public_interface_policy: "Keep refresh_algorithm_list_from_local and get_algorithm_details_from_local response shapes stable."
+    required_reviews:
+      - behavior_reviewer
+      - data_algorithm_reviewer
+      - error_tracing_reviewer
+    verification:
+      - "cache missing, corrupted and refreshed scenarios pass"
+      - "algorithm details fixtures match legacy parser behavior"
+    rollback: "Read legacy algorithms_cache.json."
+
+  - id: transfer
+    status: verified
+    current_owner: legacy_tauri_streaming
+    target_owner: async_transfer_module
+    summary: "Extract async cancellable upload/download transfer with progress callbacks."
+    public_interface_policy: "Keep upload-progress and download-progress event names stable."
+    required_reviews:
+      - behavior_reviewer
+      - async_ergonomics_reviewer
+      - error_tracing_reviewer
+      - rust_style_reviewer
+    verification:
+      - "mock HTTP upload hash extraction"
+      - "download resume with Range"
+      - "server rejects Range and full restart works"
+      - "cancel keeps resumable partial files"
+    rollback: "Use legacy Tauri transfer functions."
+
+  - id: task_persistence
+    status: verified
+    current_owner: frontend_local_storage
+    target_owner: tasks_db
+    summary: "Persist active tasks, status, output files and history in tasks.db."
+    public_interface_policy: "Preserve Task and TaskHistoryRecord frontend shapes until adapter migration is complete."
+    required_reviews:
+      - behavior_reviewer
+      - data_algorithm_reviewer
+      - async_ergonomics_reviewer
+    verification:
+      - "restart restores active tasks"
+      - "download completion writes history once"
+      - "retry from history preserves algorithm/options/format"
+    rollback: "Keep frontend localStorage as canonical task store."
+
+  - id: frontend_gateway_and_ui
+    status: verified
+    current_owner: direct_invoke_ui
+    target_owner: backend_gateway_and_polished_ui
+    summary: "Centralize frontend backend communication, add page registry, then polish UI ergonomics."
+    public_interface_policy: "No protocol changes without a separate batch entry."
+    required_reviews:
+      - behavior_reviewer
+      - frontend_ux_reviewer
+      - async_ergonomics_reviewer
+    verification:
+      - "rg -n \"\\binvoke\\b|\\blisten\\b|@tauri-apps\" src --glob '*.ts' only finds src/app/backend/gateway.ts"
+      - "desktop and narrow viewport visual checks"
+      - "untrusted HTML strings are escaped"
+    rollback: "Keep direct invoke paths for unconverted pages."

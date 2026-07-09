@@ -1,8 +1,8 @@
-use rusqlite::Connection;
 use anyhow::Result;
 use colored::Colorize;
+use rusqlite::Connection;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 pub fn run_migrations(conn: &Connection) -> Result<()> {
     let user_version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -18,6 +18,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         migrate_v2(conn)?;
         set_version(conn, 2)?;
         println!("{}", "✅ Database schema migrated to v2".green());
+    }
+
+    if user_version < 3 {
+        migrate_v3(conn)?;
+        set_version(conn, SCHEMA_VERSION)?;
+        println!("{}", "✅ Database schema migrated to v3".green());
     }
 
     Ok(())
@@ -37,6 +43,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
             group_id INTEGER DEFAULT 0,
             price_coefficient REAL DEFAULT 1.0,
             orientation INTEGER DEFAULT 0,
+            is_cached INTEGER NOT NULL DEFAULT 1,
             FOREIGN KEY (group_id) REFERENCES algorithm_groups(id)
         );
 
@@ -144,6 +151,14 @@ fn create_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn migrate_v3(conn: &Connection) -> Result<()> {
+    let _ = conn.execute(
+        "ALTER TABLE algorithms ADD COLUMN is_cached INTEGER NOT NULL DEFAULT 1",
+        [],
+    );
+    Ok(())
+}
+
 fn create_indexes(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "
@@ -167,9 +182,18 @@ fn set_version(conn: &Connection, version: i32) -> Result<()> {
 
 fn migrate_v2(conn: &Connection) -> Result<()> {
     // Add new columns to output_formats
-    let _ = conn.execute("ALTER TABLE output_formats ADD COLUMN bits_per_sample INTEGER", []);
-    let _ = conn.execute("ALTER TABLE output_formats ADD COLUMN extension TEXT NOT NULL DEFAULT ''", []);
-    let _ = conn.execute("ALTER TABLE output_formats ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute(
+        "ALTER TABLE output_formats ADD COLUMN bits_per_sample INTEGER",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE output_formats ADD COLUMN extension TEXT NOT NULL DEFAULT ''",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE output_formats ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
 
     // Create algorithm-output_format junction table
     conn.execute_batch(

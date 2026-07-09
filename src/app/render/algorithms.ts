@@ -21,9 +21,9 @@ export function renderAlgorithmDetailsSectionHtml(args: RenderAlgorithmDetailsSe
       <div class="mt-3 p-3 rounded-lg bg-bg-secondary border border-border">
         ${details.fields.map(field => `
           <div class="mb-2 last:mb-0">
-            <p class="text-sm font-semibold text-text-primary">${field.text || field.name} (--${field.name})</p>
+            <p class="text-sm font-semibold text-text-primary">${escapeHtml(field.text || field.name)} (--${escapeHtml(field.name)})</p>
             <p class="text-xs text-text-muted mt-1">
-              ${Object.entries(field.options).map(([key, value]) => `${key}: ${escapeHtml(value)}`).join(' | ')}
+              ${Object.entries(field.options).map(([key, value]) => `${escapeHtml(key)}: ${escapeHtml(value)}`).join(' | ')}
             </p>
           </div>
         `).join('')}
@@ -80,8 +80,8 @@ export function renderAlgorithmsPageHtml(args: RenderAlgorithmsPageArgs): string
                     <p class="text-text-muted">${args.t('home.algorithm')} #${p.algorithmId} / opt1=${p.opt1 ?? '-'} opt2=${p.opt2 ?? '-'} opt3=${p.opt3 ?? '-'}</p>
                   </div>
                   <div class="flex gap-2">
-                    <button class="btn btn-secondary text-sm" data-action="apply-algo-preset" data-id="${p.id}">${args.t('common.apply')}</button>
-                    <button class="btn btn-secondary text-sm" data-action="delete-preset" data-id="${p.id}">${args.t('task.action.delete')}</button>
+                    <button class="btn btn-secondary text-sm" data-action="apply-algo-preset" data-id="${args.escapeHtml(p.id)}">${args.t('common.apply')}</button>
+                    <button class="btn btn-secondary text-sm" data-action="delete-preset" data-id="${args.escapeHtml(p.id)}">${args.t('task.action.delete')}</button>
                   </div>
                 </div>
               `).join('')}
@@ -94,13 +94,13 @@ export function renderAlgorithmsPageHtml(args: RenderAlgorithmsPageArgs): string
             <div class="card text-text-muted">${args.t('algorithm.noneFound')}</div>
           ` : args.groups.map(group => `
             <div class="card">
-              <h3 class="font-semibold text-text-primary mb-3">${group.name}</h3>
+              <h3 class="font-semibold text-text-primary mb-3">${args.escapeHtml(group.name)}</h3>
               <div class="space-y-2">
                 ${group.algorithms.map(algo => `
                   <div class="p-3 bg-bg-primary rounded-lg border border-border">
                     <div class="flex items-center justify-between gap-2">
-                      <span class="text-text-primary">${algo.id}: ${algo.name}</span>
-                      <div class="flex gap-2">
+                      <span class="text-text-primary min-w-0 flex-1 break-words">${algo.id}: ${args.escapeHtml(algo.name)}</span>
+                      <div class="flex gap-2 shrink-0">
                         <button class="btn btn-secondary text-sm" data-action="toggle-algo-details" data-id="${algo.id}">
                           ${args.expandedAlgorithmId === algo.id ? args.t('common.collapse') : args.t('task.action.view')}
                         </button>

@@ -12,6 +12,7 @@ interface RenderSettingsPageArgs {
   isTestingConnection: boolean;
   isChoosingOutputDir: boolean;
   isSavingSettings: boolean;
+  escapeHtml: (value: string) => string;
   t: TranslateFn;
 }
 
@@ -26,8 +27,19 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
     isTestingConnection,
     isChoosingOutputDir,
     isSavingSettings,
+    escapeHtml,
     t,
   } = args;
+  const token = escapeHtml(config?.token || '');
+  const apiUrl = escapeHtml(config?.api_url || 'https://mvsep.com');
+  const outputDir = escapeHtml(config?.output_dir || './output');
+  const pollInterval = escapeHtml(String(config?.poll_interval || 5));
+  const algorithmAutoRefreshDays = escapeHtml(String(config?.algorithm_auto_refresh_days || 15));
+  const proxyHost = escapeHtml(config?.proxy_host || '127.0.0.1');
+  const proxyPort = escapeHtml(config?.proxy_port || '7897');
+  const cachePath = escapeHtml(algorithmCachePath || '-');
+  const statusText = escapeHtml(connectionStatusText || t('settings.notTested'));
+
   return `
       <div class="space-y-6 max-w-2xl">
         <div class="card">
@@ -36,7 +48,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.token')}</label>
               <div class="flex items-center gap-2">
-                <input type="${isTokenVisible ? 'text' : 'password'}" class="input" id="token-input" value="${config?.token || ''}" />
+                <input type="${isTokenVisible ? 'text' : 'password'}" class="input" id="token-input" value="${token}" />
                 <button
                   class="btn btn-secondary whitespace-nowrap"
                   type="button"
@@ -62,7 +74,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
             </div>
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.server')}</label>
-              <input type="text" class="input" id="api-url-input" value="${config?.api_url || 'https://mvsep.com'}" />
+              <input type="text" class="input" id="api-url-input" value="${apiUrl}" />
             </div>
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.mirror')}</label>
@@ -84,7 +96,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
                       ? 'bg-blue-100 text-blue-700 border-blue-200'
                       : 'bg-bg-primary text-text-muted border-border'
               }">
-                ${connectionStatusText || t('settings.notTested')}
+                ${statusText}
               </span>
             </div>
           </div>
@@ -96,7 +108,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.outputDir')}</label>
               <div class="flex gap-2">
-                <input type="text" class="input" id="output-dir-input" value="${config?.output_dir || './output'}" />
+                <input type="text" class="input" id="output-dir-input" value="${outputDir}" />
                 <button class="btn btn-secondary whitespace-nowrap" data-action="choose-output-dir" ${isChoosingOutputDir ? 'disabled' : ''}>
                   ${isChoosingOutputDir ? t('common.loading') : t('settings.chooseFolder')}
                 </button>
@@ -104,7 +116,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
             </div>
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.interval')} (${t('common.seconds')})</label>
-              <input type="number" class="input" id="poll-interval-input" value="${config?.poll_interval || 5}" />
+              <input type="number" class="input" id="poll-interval-input" value="${pollInterval}" />
             </div>
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.algorithmAutoRefreshDays')} (${t('settings.daysUnit')})</label>
@@ -113,14 +125,14 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
                 min="1"
                 class="input"
                 id="algo-auto-refresh-days-input"
-                value="${config?.algorithm_auto_refresh_days || 15}"
+                value="${algorithmAutoRefreshDays}"
               />
             </div>
             <div>
               <label class="block text-sm text-text-secondary mb-1">${t('settings.outputFormat')}</label>
               <select class="select" id="settings-output-format-select">
                 ${formats.map(f => `
-                  <option value="${f.id}" ${f.id === (config?.output_format ?? 1) ? 'selected' : ''}>${f.name}</option>
+                  <option value="${f.id}" ${f.id === (config?.output_format ?? 1) ? 'selected' : ''}>${escapeHtml(f.name)}</option>
                 `).join('')}
               </select>
             </div>
@@ -141,11 +153,11 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm text-text-secondary mb-1">${t('settings.host')}</label>
-                <input type="text" class="input" id="proxy-host-input" value="${config?.proxy_host || '127.0.0.1'}" />
+                <input type="text" class="input" id="proxy-host-input" value="${proxyHost}" />
               </div>
               <div>
                 <label class="block text-sm text-text-secondary mb-1">${t('settings.port')}</label>
-                <input type="text" class="input" id="proxy-port-input" value="${config?.proxy_port || '7897'}" />
+                <input type="text" class="input" id="proxy-port-input" value="${proxyPort}" />
               </div>
             </div>
           </div>
@@ -159,7 +171,7 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
               type="text"
               class="input"
               readonly
-              value="${algorithmCachePath || '-'}"
+              value="${cachePath}"
             />
           </div>
         </div>

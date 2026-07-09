@@ -1,6 +1,6 @@
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { applyTheme, getThemeList } from '../../themes';
 import { setLocale, t, type Locale } from '../../i18n';
+import { backendGateway } from '../backend/gateway';
 import type { DomEventsContext } from '../contracts/app-context';
 
 export function handleDocumentClick(app: DomEventsContext, e: Event): void {
@@ -61,7 +61,7 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
   if (target.closest('[data-action="delete-task"]')) {
     const taskEl = target.closest('[data-task-hash]') as HTMLElement;
     const hash = taskEl?.dataset.taskHash;
-    if (hash) app.deleteTask(hash);
+    if (hash) void app.deleteTask(hash).catch(() => undefined);
   }
 
   if (target.closest('[data-action="toggle-task-details"]')) {
@@ -93,8 +93,7 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
 
   if (target.closest('[data-action="clear-history"]')) {
     if (!app.confirmAction('Clear all task history records? This cannot be undone.')) return;
-    app.clearHistory();
-    app.render();
+    void app.clearHistory().catch(() => undefined).finally(() => app.render());
   }
 
   if (target.closest('[data-action="set-task-filter"]')) {
@@ -109,8 +108,7 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
     const id = target.closest('[data-action="delete-history"]')?.getAttribute('data-id');
     if (id) {
       if (!app.confirmAction('Delete this history record? This cannot be undone.')) return;
-      app.deleteFromHistory(id);
-      app.render();
+      void app.deleteFromHistory(id).catch(() => undefined).finally(() => app.render());
     }
   }
 
@@ -194,7 +192,13 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
 
   if (target.closest('[data-action="open-url"]')) {
     const url = target.closest('[data-action="open-url"]')?.getAttribute('data-url');
-    if (url) void openUrl(url);
+    if (url) {
+      void backendGateway.openExternalUrl(url).catch((err) => {
+        console.error('Failed to open external URL:', err);
+        app.showTransientNotice(String(err), 'warn', 3200);
+        void app.sendDebugLog('ERROR', `openExternalUrl failed: ${String(err)}`);
+      });
+    }
   }
   if (target.closest('[data-action="open-logs-page"]')) {
     app.navigate('logs');

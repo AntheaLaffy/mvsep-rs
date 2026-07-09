@@ -26,7 +26,10 @@ impl Database {
         };
 
         {
-            let locked = db.conn.lock().map_err(|e| anyhow::anyhow!("Poison error: {}", e))?;
+            let locked = db
+                .conn
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Poison error: {}", e))?;
             migrations::run_migrations(&locked)?;
         }
 
@@ -37,7 +40,10 @@ impl Database {
     where
         F: FnOnce(&Connection) -> anyhow::Result<T>,
     {
-        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         f(&conn)
     }
 

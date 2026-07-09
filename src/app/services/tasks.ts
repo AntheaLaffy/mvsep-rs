@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { backendGateway } from '../backend/gateway';
 import type { TaskStatusPayload } from '../types';
 import type { TaskServiceContext } from '../contracts/app-context';
 
@@ -36,7 +36,7 @@ export async function pollTaskStatus(app: TaskServiceContext, hash: string): Pro
   app.pollInFlightHashes.add(hash);
 
   try {
-    const status = await invoke<TaskStatusPayload>('get_task_status', {
+    const status: TaskStatusPayload = await backendGateway.getTaskStatus({
       hash,
       apiUrl: app.config.api_url,
       token: app.config.token,
@@ -72,14 +72,30 @@ export async function pollTaskStatus(app: TaskServiceContext, hash: string): Pro
       }
     }
 
-    if (app.isTerminalStatus(task?.status || status.status)) {
+    const isTerminal = app.isTerminalStatus(task?.status || status.status);
+    let completionPersisted = false;
+    if (isTerminal) {
       stopPolling(app, hash);
       if (task) {
-        app.addToHistory(task, app.config?.output_dir || null);
+        try {
+          await app.addToHistory(task, app.config?.output_dir || null);
+          completionPersisted = true;
+        } catch (e) {
+          console.error('Failed to persist task history:', e);
+          task.status = 'waiting';
+          task.phase = 'queueing';
+          task.error = 'Completion persistence failed. Status sync will retry.';
+          await app.saveActiveTasks(true);
+          startPolling(app, hash);
+        }
       }
     }
 
-    app.saveActiveTasks();
+    if (isTerminal && completionPersisted) {
+      await app.saveActiveTasks(true);
+    } else if (!isTerminal) {
+      void app.saveActiveTasks().catch(() => undefined);
+    }
     if (app.shouldRenderTaskUpdates()) {
       app.requestTaskPanelsRefresh();
     }
@@ -103,9 +119,15 @@ export function stopPolling(app: TaskServiceContext, hash: string): void {
 
 export async function downloadTask(app: TaskServiceContext, hash: string, fileIndex: number | null = null): Promise<void> {
   if (!app.config) return;
+  const actionKey = `download:${hash}`;
+  if (app.isActionRunning(actionKey)) return;
+  app.setActionRunning(actionKey, true);
   void app.sendDebugLog('INFO', `downloadTask start: hash=${hash}, fileIndex=${fileIndex ?? 'all'}`);
   const task = app.tasks.find((item) => item.hash === hash);
-  if (app.cancellingDownloadHashes.has(hash)) return;
+  if (app.cancellingDownloadHashes.has(hash)) {
+    app.setActionRunning(actionKey, false);
+    return;
+  }
   if (task) {
     task.phase = 'downloading';
     task.download_percent = 0;
@@ -116,7 +138,7 @@ export async function downloadTask(app: TaskServiceContext, hash: string, fileIn
   }
 
   try {
-    const files = await invoke<string[]>('download_result', {
+    const files = await backendGateway.downloadResult({
       hash,
       outputDir: app.config.output_dir || './output',
       fileIndex,
@@ -126,6 +148,7 @@ export async function downloadTask(app: TaskServiceContext, hash: string, fileIn
     });
     app.addFrontendLog('INFO', `Downloaded ${files.length} files for task ${hash}`);
     void app.sendDebugLog('INFO', `downloadTask success: hash=${hash}, files=${files.length}`);
+    let completionPersisted = false;
     if (task) {
       task.output_files = files;
       task.status = 'done';
@@ -133,7 +156,20 @@ export async function downloadTask(app: TaskServiceContext, hash: string, fileIn
       task.download_percent = 100;
       const firstPath = files[0] || app.config.output_dir || null;
       const outputPath = firstPath ? app.getParentPath(firstPath) : null;
-      app.addToHistory(task, outputPath);
+      try {
+        await app.addToHistory(task, outputPath);
+        completionPersisted = true;
+      } catch (e) {
+        console.error('Failed to persist task history:', e);
+        task.status = 'waiting';
+        task.phase = 'queueing';
+        task.error = 'Completion persistence failed. Status sync will retry.';
+        await app.saveActiveTasks(true);
+        startPolling(app, hash);
+      }
+    }
+    if (task && completionPersisted) {
+      await app.saveActiveTasks(true);
     }
   } catch (e) {
     console.error('Failed to download task:', e);
@@ -161,7 +197,10 @@ export async function downloadTask(app: TaskServiceContext, hash: string, fileIn
       }
     }
   } finally {
-    app.saveActiveTasks();
+    app.setActionRunning(actionKey, false);
+    if (!task || !app.isTerminalStatus(task.status)) {
+      void app.saveActiveTasks().catch(() => undefined);
+    }
     app.requestTaskPanelsRefresh();
   }
 }
@@ -172,7 +211,7 @@ export async function cancelDownload(app: TaskServiceContext, hash: string): Pro
   app.cancellingDownloadHashes.add(hash);
   app.requestTaskPanelsRefresh();
   try {
-    await invoke<void>('cancel_download', { hash });
+    await backendGateway.cancelDownload({ hash });
     app.addFrontendLog('INFO', `Cancel requested for download task ${hash}`);
   } catch (e) {
     console.error('Failed to cancel download:', e);

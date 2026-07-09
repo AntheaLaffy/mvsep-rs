@@ -23,10 +23,14 @@
 //! 本地: {原文件名主干}_vocals.flac
 //! ```
 
+use futures_util::StreamExt;
+use std::fmt;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
-use futures_util::StreamExt;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
 /// Progress information for upload/download operations.
@@ -40,6 +44,75 @@ pub struct TransferProgress {
     pub done: bool,
     pub failed: bool,
 }
+
+/// Structured transfer error used by async callers that need to preserve
+/// HTTP/file context before converting to UI-facing strings.
+#[derive(Debug, Clone)]
+pub struct TransferError {
+    message: String,
+    http_status: Option<u16>,
+    url: Option<String>,
+    path: Option<PathBuf>,
+    cancelled: bool,
+}
+
+impl TransferError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            http_status: None,
+            url: None,
+            path: None,
+            cancelled: false,
+        }
+    }
+
+    pub fn cancelled(message: impl Into<String>) -> Self {
+        Self {
+            cancelled: true,
+            ..Self::new(message)
+        }
+    }
+
+    pub fn with_http_status(mut self, status: u16) -> Self {
+        self.http_status = Some(status);
+        self
+    }
+
+    pub fn with_url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+
+    pub fn with_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.path = Some(path.into());
+        self
+    }
+
+    pub fn http_status(&self) -> Option<u16> {
+        self.http_status
+    }
+
+    pub fn url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled
+    }
+}
+
+impl fmt::Display for TransferError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for TransferError {}
 
 /// Metadata stored alongside `.part` files for download resume.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -77,6 +150,54 @@ fn now_timestamp() -> String {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(d) => format!("{}.{:03}", d.as_secs(), d.subsec_millis()),
         Err(_) => "0.000".to_string(),
+    }
+}
+
+async fn save_partial_download_meta_async(
+    meta_path: &Path,
+    meta: &PartialDownloadMeta,
+) -> Result<(), TransferError> {
+    if let Some(parent) = meta_path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            TransferError::new(format!("create partial metadata directory failed: {}", e))
+                .with_path(parent)
+        })?;
+    }
+    let content = serde_json::to_string_pretty(meta).map_err(|e| {
+        TransferError::new(format!("serialize partial metadata failed: {}", e)).with_path(meta_path)
+    })?;
+    tokio::fs::write(meta_path, content).await.map_err(|e| {
+        TransferError::new(format!("write partial metadata failed: {}", e)).with_path(meta_path)
+    })?;
+    Ok(())
+}
+
+async fn get_resume_info_async(final_path: &Path, file_url: &str) -> u64 {
+    let part = part_path(final_path);
+    let meta = meta_path(&part);
+
+    let part_size = match tokio::fs::metadata(&part).await {
+        Ok(metadata) => metadata.len(),
+        Err(_) => return 0,
+    };
+    if part_size == 0 {
+        return 0;
+    }
+
+    let can_resume = match tokio::fs::read_to_string(&meta).await {
+        Ok(content) => match serde_json::from_str::<PartialDownloadMeta>(&content) {
+            Ok(pm) => pm.file_url == file_url,
+            Err(_) => true,
+        },
+        Err(_) => true,
+    };
+
+    if can_resume {
+        part_size
+    } else {
+        let _ = tokio::fs::remove_file(&part).await;
+        let _ = tokio::fs::remove_file(&meta).await;
+        0
     }
 }
 
@@ -135,84 +256,223 @@ fn sanitize_name(value: &str) -> String {
 
 // ── Upload ──
 
-/// Upload a file with progress reporting.
+fn upload_error_message(status_code: u16, body_text: &str) -> String {
+    let msg = serde_json::from_str::<serde_json::Value>(body_text)
+        .ok()
+        .and_then(|v| {
+            v.get("errors")
+                .and_then(|e| e.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .or_else(|| {
+                    v.get("message")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
+        })
+        .unwrap_or_else(|| body_text.to_string());
+    format!("HTTP {} - {}", status_code, msg)
+}
+
+fn extract_upload_hash(body_text: &str) -> Option<String> {
+    let body = serde_json::from_str::<serde_json::Value>(body_text).ok()?;
+    body.get("hash")
+        .or_else(|| body.get("data").and_then(|d| d.get("hash")))
+        .or_else(|| body.get("task_hash"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+struct ProgressEmit {
+    file_name: String,
+    bytes: u64,
+    total_bytes: Option<u64>,
+    started: Instant,
+    session_bytes: u64,
+    done: bool,
+    failed: bool,
+}
+
+fn emit_progress(cb: &(dyn Fn(TransferProgress) + Send + Sync), event: ProgressEmit) {
+    let elapsed = event.started.elapsed().as_secs_f64().max(0.001);
+    let speed_bps = if event.done {
+        0.0
+    } else {
+        event.session_bytes as f64 / elapsed
+    };
+    let percent = event
+        .total_bytes
+        .map(|total| {
+            let total = total.max(1);
+            (event.bytes as f32 / total as f32) * 100.0
+        })
+        .unwrap_or(0.0);
+    cb(TransferProgress {
+        file_name: event.file_name,
+        bytes: event.bytes,
+        total_bytes: event.total_bytes,
+        speed_bps,
+        percent: if event.done && !event.failed && event.total_bytes.is_some() {
+            100.0
+        } else {
+            percent
+        },
+        done: event.done,
+        failed: event.failed,
+    });
+}
+
+/// Upload a file with async streaming and progress reporting.
 ///
-/// Reads the file with a progress-tracking wrapper, then sends it
-/// as a multipart request. Progress is reported during the read phase.
-/// Async implementation of the upload logic.
-async fn upload_async(
-    file_path: &Path,
-    file_name: &str,
-    file_size: u64,
-    proxy_host: &str,
-    proxy_port: u16,
-    proxy_mode: &str,
+/// The caller supplies the async `reqwest::Client`, so GUI adapters can reuse
+/// their proxy-aware client without creating nested runtimes.
+pub async fn upload_file_async(
+    client: &reqwest::Client,
     url: &str,
+    file_path: &Path,
     extra_fields: Vec<(String, String)>,
-    progress_cb: impl Fn(TransferProgress) + Send + 'static,
-) -> Result<(u16, String), String> {
-    let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300));
-    if proxy_mode == "manual" {
-        let p = format!("http://{}:{}", proxy_host, proxy_port);
-        if let Ok(proxy) = reqwest::Proxy::all(&p) {
-            builder = builder.proxy(proxy);
-        }
-    } else if proxy_mode == "none" {
-        builder = builder.no_proxy();
-    }
-    let client = builder.build().map_err(|e| format!("{}", e))?;
+    cancel_token: Option<Arc<AtomicBool>>,
+    progress_cb: impl Fn(TransferProgress) + Send + Sync + 'static,
+) -> Result<String, TransferError> {
+    let file_name = file_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("audio.wav")
+        .to_string();
+    let file = tokio::fs::File::open(file_path).await.map_err(|e| {
+        TransferError::new(format!("open upload file failed: {}", e)).with_path(file_path)
+    })?;
+    let file_size = file
+        .metadata()
+        .await
+        .map_err(|e| {
+            TransferError::new(format!("read upload file metadata failed: {}", e))
+                .with_path(file_path)
+        })?
+        .len();
+    let uploaded = Arc::new(AtomicU64::new(0));
+    let started = Instant::now();
+    let last_emit = Arc::new(Mutex::new(Instant::now() - Duration::from_millis(120)));
+    let progress_cb: Arc<dyn Fn(TransferProgress) + Send + Sync> = Arc::new(progress_cb);
 
-    let file = tokio::fs::File::open(file_path).await
-        .map_err(|e| format!("{}", e))?;
-
-    let fname = file_name.to_string();
-    let fsize = file_size;
-    let cb = std::sync::Arc::new(std::sync::Mutex::new(Some(progress_cb)));
-    let uploaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-
-    use futures_util::StreamExt;
+    let stream_file_name = file_name.clone();
+    let stream_uploaded = uploaded.clone();
+    let stream_last_emit = last_emit.clone();
+    let stream_progress_cb = progress_cb.clone();
+    let stream_cancel = cancel_token.clone();
     let stream = ReaderStream::new(file).map(move |result| {
-        if let Ok(ref chunk) = result {
-            let chunk_len = chunk.len() as u64;
-            let total = uploaded.fetch_add(chunk_len, std::sync::atomic::Ordering::SeqCst) + chunk_len;
-            let pct = if fsize > 0 { total as f32 / fsize as f32 * 100.0 } else { 0.0 };
-            if let Some(cb_fn) = cb.lock().unwrap().as_ref() {
-                cb_fn(TransferProgress {
-                    file_name: fname.clone(),
-                    bytes: total,
-                    total_bytes: Some(fsize),
-                    speed_bps: 0.0,
-                    percent: pct,
-                    done: false,
-                    failed: false,
-                });
+        if stream_cancel
+            .as_ref()
+            .is_some_and(|token| token.load(Ordering::SeqCst))
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Upload cancelled",
+            ));
+        }
+
+        let chunk = result?;
+        let chunk_len = chunk.len() as u64;
+        let total_uploaded = stream_uploaded.fetch_add(chunk_len, Ordering::SeqCst) + chunk_len;
+        let mut should_emit = false;
+        if let Ok(mut last) = stream_last_emit.lock() {
+            if last.elapsed().as_millis() >= 120 {
+                *last = Instant::now();
+                should_emit = true;
             }
         }
-        result
+        if should_emit {
+            emit_progress(
+                stream_progress_cb.as_ref(),
+                ProgressEmit {
+                    file_name: stream_file_name.clone(),
+                    bytes: total_uploaded,
+                    total_bytes: Some(file_size),
+                    started,
+                    session_bytes: total_uploaded,
+                    done: false,
+                    failed: false,
+                },
+            );
+        }
+        Ok(chunk)
     });
 
-    let file_body = reqwest::Body::wrap_stream(stream);
-    let part = reqwest::multipart::Part::stream(file_body)
-        .file_name(file_name.to_string())
-        .mime_str("audio/*")
-        .map_err(|e| format!("{}", e))?;
+    let part =
+        reqwest::multipart::Part::stream_with_length(reqwest::Body::wrap_stream(stream), file_size)
+            .file_name(file_name.clone())
+            .mime_str("audio/*")
+            .map_err(|e| {
+                TransferError::new(format!("build upload multipart part failed: {}", e))
+                    .with_url(url)
+                    .with_path(file_path)
+            })?;
 
     let mut form = reqwest::multipart::Form::new().part("audiofile", part);
     for (key, val) in extra_fields {
         form = form.text(key, val);
     }
 
-    let response = client.post(url)
-        .multipart(form)
-        .send()
-        .await
-        .map_err(|e| format!("Upload failed: {}", e))?;
+    let response = client.post(url).multipart(form).send().await.map_err(|e| {
+        if cancel_token
+            .as_ref()
+            .is_some_and(|token| token.load(Ordering::SeqCst))
+        {
+            TransferError::cancelled("Upload cancelled")
+                .with_url(url)
+                .with_path(file_path)
+        } else {
+            TransferError::new(format!("Upload failed: {}", e))
+                .with_url(url)
+                .with_path(file_path)
+        }
+    })?;
 
     let status = response.status();
-    let body_text = response.text().await.map_err(|e| format!("{}", e))?;
+    let status_code = status.as_u16();
+    let body_text = response.text().await.map_err(|e| {
+        TransferError::new(format!("read upload response body failed: {}", e))
+            .with_url(url)
+            .with_path(file_path)
+            .with_http_status(status_code)
+    })?;
+    if !status.is_success() {
+        return Err(
+            TransferError::new(upload_error_message(status_code, &body_text))
+                .with_url(url)
+                .with_path(file_path)
+                .with_http_status(status_code),
+        );
+    }
 
-    Ok((status.as_u16(), body_text))
+    let hash = extract_upload_hash(&body_text)
+        .filter(|hash| !hash.is_empty())
+        .ok_or_else(|| {
+            TransferError::new("Failed to get task hash")
+                .with_url(url)
+                .with_path(file_path)
+                .with_http_status(status_code)
+        })?;
+
+    let total_uploaded = uploaded.load(Ordering::SeqCst).max(file_size);
+    emit_progress(
+        progress_cb.as_ref(),
+        ProgressEmit {
+            file_name,
+            bytes: total_uploaded,
+            total_bytes: Some(file_size),
+            started,
+            session_bytes: total_uploaded,
+            done: true,
+            failed: false,
+        },
+    );
+
+    Ok(hash)
 }
 
 pub fn upload_file(
@@ -222,56 +482,223 @@ pub fn upload_file(
     url: &str,
     file_path: &Path,
     extra_fields: Vec<(String, String)>,
-    progress_cb: impl Fn(TransferProgress) + Send + 'static,
+    progress_cb: impl Fn(TransferProgress) + Send + Sync + 'static,
 ) -> anyhow::Result<String> {
-    let file_name = file_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("audio.wav")
-        .to_string();
-    let file_size = std::fs::metadata(file_path)?.len();
-
-    let file_path = file_path.to_path_buf();
-    let url = url.to_string();
-
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => anyhow::bail!("Failed to start runtime: {}", e),
     };
-    let result = runtime.block_on(upload_async(
-        &file_path, &file_name, file_size,
-        proxy_host, proxy_port, proxy_mode,
-        &url, extra_fields, progress_cb,
-    ));
-    let (status_code, body_text) = match result {
-        Ok(r) => r,
-        Err(e) => anyhow::bail!("Upload failed: {}", e),
-    };
 
-    if status_code != 200 {
-        let msg = serde_json::from_str::<serde_json::Value>(&body_text)
-            .ok()
-            .and_then(|v| {
-                v.get("errors").and_then(|e| e.as_array())
-                    .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
-                    .or_else(|| v.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()))
-            })
-            .unwrap_or_else(|| body_text.clone());
-        anyhow::bail!("HTTP {} - {}", status_code, msg);
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(300));
+    if proxy_mode == "manual" {
+        let p = format!("http://{}:{}", proxy_host, proxy_port);
+        if let Ok(proxy) = reqwest::Proxy::all(&p) {
+            builder = builder.proxy(proxy);
+        }
+    } else if proxy_mode == "none" {
+        builder = builder.no_proxy();
     }
+    let client = builder.build()?;
 
-    let body: serde_json::Value = serde_json::from_str(&body_text)
-        .unwrap_or(serde_json::Value::Null);
-    let hash = body.get("hash")
-        .or_else(|| body.get("data").and_then(|d| d.get("hash")))
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    Ok(hash)
+    runtime
+        .block_on(upload_file_async(
+            &client,
+            url,
+            file_path,
+            extra_fields,
+            None,
+            progress_cb,
+        ))
+        .map_err(anyhow::Error::new)
 }
 
 // ── Download ──
+
+/// Download a file with async streaming, automatic resume support, cancellation,
+/// and progress reporting.
+///
+/// Cancellation returns an error containing `Download cancelled` and leaves the
+/// `.part` file plus metadata in place so a later call can resume.
+pub async fn download_file_async(
+    client: &reqwest::Client,
+    file_url: &str,
+    dest_path: &Path,
+    remote_file_name: &str,
+    cancel_token: Option<Arc<AtomicBool>>,
+    progress_cb: impl Fn(TransferProgress) + Send + Sync + 'static,
+) -> Result<(), TransferError> {
+    let part = part_path(dest_path);
+    let meta = meta_path(&part);
+
+    if let Some(parent) = part.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            TransferError::new(format!("create partial download directory failed: {}", e))
+                .with_url(file_url)
+                .with_path(parent)
+        })?;
+    }
+    if let Some(parent) = meta.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            TransferError::new(format!("create partial metadata directory failed: {}", e))
+                .with_url(file_url)
+                .with_path(parent)
+        })?;
+    }
+
+    let mut resume_from = get_resume_info_async(dest_path, file_url).await;
+    let pm = PartialDownloadMeta {
+        file_url: file_url.to_string(),
+        remote_file_name: remote_file_name.to_string(),
+        updated_at: now_timestamp(),
+    };
+    save_partial_download_meta_async(&meta, &pm).await?;
+
+    if cancel_token
+        .as_ref()
+        .is_some_and(|token| token.load(Ordering::SeqCst))
+    {
+        return Err(TransferError::cancelled("Download cancelled")
+            .with_url(file_url)
+            .with_path(dest_path));
+    }
+
+    let mut request = client.get(file_url);
+    if resume_from > 0 {
+        request = request.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+    }
+
+    let response = request.send().await.map_err(|e| {
+        TransferError::new(format!("Download request failed: {}", e))
+            .with_url(file_url)
+            .with_path(dest_path)
+    })?;
+    let status = response.status();
+    let (append_mode, total_bytes) =
+        if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            let total = parse_total_bytes_from_headers(response.headers())
+                .or_else(|| response.content_length().map(|len| resume_from + len));
+            (true, total)
+        } else if status.is_success() {
+            if resume_from > 0 {
+                resume_from = 0;
+                let _ = tokio::fs::remove_file(&part).await;
+            }
+            (false, response.content_length())
+        } else {
+            return Err(
+                TransferError::new(format!("HTTP {} while downloading file", status))
+                    .with_url(file_url)
+                    .with_path(dest_path)
+                    .with_http_status(status.as_u16()),
+            );
+        };
+
+    let mut options = tokio::fs::OpenOptions::new();
+    options.create(true).write(true);
+    if append_mode {
+        options.append(true);
+    } else {
+        options.truncate(true);
+    }
+    let mut file = options.open(&part).await.map_err(|e| {
+        TransferError::new(format!("open partial download file failed: {}", e))
+            .with_url(file_url)
+            .with_path(&part)
+    })?;
+
+    let progress_cb: Arc<dyn Fn(TransferProgress) + Send + Sync> = Arc::new(progress_cb);
+    let file_name = dest_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output")
+        .to_string();
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = resume_from;
+    let mut session_downloaded: u64 = 0;
+    let started = Instant::now();
+    let mut last_emit = Instant::now() - Duration::from_millis(150);
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| {
+            TransferError::new(format!("read download response chunk failed: {}", e))
+                .with_url(file_url)
+                .with_path(dest_path)
+        })?;
+        file.write_all(&chunk).await.map_err(|e| {
+            TransferError::new(format!("write partial download file failed: {}", e))
+                .with_url(file_url)
+                .with_path(&part)
+        })?;
+        let chunk_len = chunk.len() as u64;
+        downloaded += chunk_len;
+        session_downloaded += chunk_len;
+
+        if last_emit.elapsed().as_millis() >= 150 {
+            emit_progress(
+                progress_cb.as_ref(),
+                ProgressEmit {
+                    file_name: file_name.clone(),
+                    bytes: downloaded,
+                    total_bytes,
+                    started,
+                    session_bytes: session_downloaded,
+                    done: false,
+                    failed: false,
+                },
+            );
+            last_emit = Instant::now();
+        }
+
+        if cancel_token
+            .as_ref()
+            .is_some_and(|token| token.load(Ordering::SeqCst))
+        {
+            file.flush().await.map_err(|e| {
+                TransferError::new(format!("flush partial download file failed: {}", e))
+                    .with_url(file_url)
+                    .with_path(&part)
+            })?;
+            return Err(TransferError::cancelled("Download cancelled")
+                .with_url(file_url)
+                .with_path(dest_path));
+        }
+    }
+
+    file.flush().await.map_err(|e| {
+        TransferError::new(format!("flush partial download file failed: {}", e))
+            .with_url(file_url)
+            .with_path(&part)
+    })?;
+
+    if dest_path.exists() {
+        tokio::fs::remove_file(dest_path).await.map_err(|e| {
+            TransferError::new(format!("remove existing output file failed: {}", e))
+                .with_url(file_url)
+                .with_path(dest_path)
+        })?;
+    }
+    tokio::fs::rename(&part, dest_path).await.map_err(|e| {
+        TransferError::new(format!("finalize downloaded file failed: {}", e))
+            .with_url(file_url)
+            .with_path(dest_path)
+    })?;
+    let _ = tokio::fs::remove_file(&meta).await;
+
+    emit_progress(
+        progress_cb.as_ref(),
+        ProgressEmit {
+            file_name,
+            bytes: downloaded,
+            total_bytes,
+            started,
+            session_bytes: session_downloaded,
+            done: true,
+            failed: false,
+        },
+    );
+
+    Ok(())
+}
 
 /// Download a file with streaming, resume support, and progress reporting.
 ///
@@ -308,29 +735,27 @@ pub fn download_file(
     // Build request with optional Range header
     let mut request = client.get(file_url);
     if resume_from > 0 {
-        request = request.header(
-            reqwest::header::RANGE,
-            format!("bytes={}-", resume_from),
-        );
+        request = request.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
     }
 
     let response = request.send()?;
     let status = response.status();
 
-    let (append_mode, total_bytes) = if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
-        let total = parse_total_bytes_from_content_range(&response)
-            .or_else(|| response.content_length().map(|len| resume_from + len));
-        (true, total)
-    } else if status.is_success() {
-        if resume_from > 0 {
-            // Server doesn't support resume, restart from scratch
-        }
-        let total = response.content_length();
-        let _ = std::fs::remove_file(&part);
-        (false, total)
-    } else {
-        anyhow::bail!("HTTP {} while downloading file", status);
-    };
+    let (append_mode, total_bytes) =
+        if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            let total = parse_total_bytes_from_content_range(&response)
+                .or_else(|| response.content_length().map(|len| resume_from + len));
+            (true, total)
+        } else if status.is_success() {
+            if resume_from > 0 {
+                // Server doesn't support resume, restart from scratch
+            }
+            let total = response.content_length();
+            let _ = std::fs::remove_file(&part);
+            (false, total)
+        } else {
+            anyhow::bail!("HTTP {} while downloading file", status);
+        };
 
     // Open file for writing
     let mut file = std::fs::OpenOptions::new()
@@ -405,12 +830,16 @@ pub fn download_file(
     Ok(())
 }
 
-/// Parse total bytes from the `Content-Range` response header.
-fn parse_total_bytes_from_content_range(response: &reqwest::blocking::Response) -> Option<u64> {
-    let value = response.headers().get(reqwest::header::CONTENT_RANGE)?;
+fn parse_total_bytes_from_headers(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let value = headers.get(reqwest::header::CONTENT_RANGE)?;
     let raw = value.to_str().ok()?;
     let slash = raw.rfind('/')?;
     raw[(slash + 1)..].trim().parse::<u64>().ok()
+}
+
+/// Parse total bytes from the `Content-Range` response header.
+fn parse_total_bytes_from_content_range(response: &reqwest::blocking::Response) -> Option<u64> {
+    parse_total_bytes_from_headers(response.headers())
 }
 
 /// Check if a `.part` file exists and can be resumed.
@@ -445,5 +874,241 @@ pub fn get_resume_info(final_path: &Path, file_url: &str) -> u64 {
         let _ = std::fs::remove_file(&part);
         let _ = std::fs::remove_file(&meta);
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::mpsc::{self, Receiver};
+    use std::thread;
+    use std::time::Duration;
+
+    fn test_client() -> reqwest::Client {
+        reqwest::Client::builder().no_proxy().build().unwrap()
+    }
+
+    fn read_http_request(stream: &mut TcpStream) -> String {
+        let mut raw = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !raw.ends_with(b"\r\n\r\n") {
+            stream.read_exact(&mut byte).unwrap();
+            raw.push(byte[0]);
+        }
+        let header = String::from_utf8_lossy(&raw).to_string();
+        let content_length = header
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if name.eq_ignore_ascii_case("content-length") {
+                    value.trim().parse::<usize>().ok()
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        let mut body = vec![0_u8; content_length];
+        if content_length > 0 {
+            stream.read_exact(&mut body).unwrap();
+        }
+        format!("{}{}", header, String::from_utf8_lossy(&body))
+    }
+
+    fn write_response(
+        stream: &mut TcpStream,
+        status: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+    ) {
+        let mut response = format!("HTTP/1.1 {}\r\nContent-Length: {}\r\n", status, body.len());
+        for (name, value) in headers {
+            response.push_str(name);
+            response.push_str(": ");
+            response.push_str(value);
+            response.push_str("\r\n");
+        }
+        response.push_str("\r\n");
+        stream.write_all(response.as_bytes()).unwrap();
+        stream.write_all(body).unwrap();
+        stream.flush().unwrap();
+    }
+
+    fn spawn_server(
+        handler: impl FnOnce(String, TcpStream) + Send + 'static,
+    ) -> (String, Receiver<String>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_http_request(&mut stream);
+            tx.send(request.clone()).unwrap();
+            handler(request, stream);
+        });
+        (format!("http://{}", addr), rx, handle)
+    }
+
+    #[test]
+    fn async_upload_extracts_hash_from_mock_http_response() {
+        let (base_url, rx, handle) = spawn_server(|request, mut stream| {
+            assert!(request.starts_with("POST "));
+            assert!(request.contains("audiofile"));
+            assert!(request.contains("api_token"));
+            write_response(
+                &mut stream,
+                "200 OK",
+                &[("Content-Type", "application/json".to_string())],
+                br#"{"data":{"hash":"hash-from-upload"}}"#,
+            );
+        });
+        let temp = tempfile::tempdir().unwrap();
+        let file_path = temp.path().join("song.wav");
+        std::fs::write(&file_path, b"audio-bytes").unwrap();
+        let progress = Arc::new(Mutex::new(Vec::<TransferProgress>::new()));
+        let progress_for_cb = progress.clone();
+
+        let hash = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(upload_file_async(
+                &test_client(),
+                &format!("{}/upload", base_url),
+                &file_path,
+                vec![("api_token".to_string(), "token".to_string())],
+                None,
+                move |p| progress_for_cb.lock().unwrap().push(p),
+            ));
+
+        assert_eq!(hash.unwrap(), "hash-from-upload");
+        assert!(rx.recv().unwrap().contains("audio-bytes"));
+        handle.join().unwrap();
+        assert!(progress.lock().unwrap().iter().any(|p| p.done && !p.failed));
+    }
+
+    #[test]
+    fn async_download_resumes_with_range_header() {
+        let (base_url, rx, handle) = spawn_server(|_request, mut stream| {
+            write_response(
+                &mut stream,
+                "206 Partial Content",
+                &[("Content-Range", "bytes 6-10/11".to_string())],
+                b"world",
+            );
+        });
+        let file_url = format!("{}/file.wav", base_url);
+        let temp = tempfile::tempdir().unwrap();
+        let dest_path = temp.path().join("song_vocals.wav");
+        std::fs::write(part_path(&dest_path), b"hello ").unwrap();
+        let meta = PartialDownloadMeta {
+            file_url: file_url.clone(),
+            remote_file_name: "remote.wav".to_string(),
+            updated_at: now_timestamp(),
+        };
+        std::fs::write(
+            meta_path(&part_path(&dest_path)),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .unwrap();
+
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(download_file_async(
+                &test_client(),
+                &file_url,
+                &dest_path,
+                "remote.wav",
+                None,
+                |_| {},
+            ))
+            .unwrap();
+
+        let request = rx.recv().unwrap();
+        handle.join().unwrap();
+        assert!(request.to_ascii_lowercase().contains("range: bytes=6-"));
+        assert_eq!(std::fs::read(&dest_path).unwrap(), b"hello world");
+        assert!(!part_path(&dest_path).exists());
+        assert!(!meta_path(&part_path(&dest_path)).exists());
+    }
+
+    #[test]
+    fn async_download_restarts_when_server_rejects_range() {
+        let (base_url, rx, handle) = spawn_server(|_request, mut stream| {
+            write_response(&mut stream, "200 OK", &[], b"complete-file");
+        });
+        let file_url = format!("{}/file.wav", base_url);
+        let temp = tempfile::tempdir().unwrap();
+        let dest_path = temp.path().join("song_vocals.wav");
+        std::fs::write(part_path(&dest_path), b"partial").unwrap();
+        let meta = PartialDownloadMeta {
+            file_url: file_url.clone(),
+            remote_file_name: "remote.wav".to_string(),
+            updated_at: now_timestamp(),
+        };
+        std::fs::write(
+            meta_path(&part_path(&dest_path)),
+            serde_json::to_string(&meta).unwrap(),
+        )
+        .unwrap();
+
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(download_file_async(
+                &test_client(),
+                &file_url,
+                &dest_path,
+                "remote.wav",
+                None,
+                |_| {},
+            ))
+            .unwrap();
+
+        let request = rx.recv().unwrap();
+        handle.join().unwrap();
+        assert!(request.to_ascii_lowercase().contains("range: bytes=7-"));
+        assert_eq!(std::fs::read(&dest_path).unwrap(), b"complete-file");
+    }
+
+    #[test]
+    fn async_download_cancel_keeps_resumable_partial_files() {
+        let (base_url, _rx, handle) = spawn_server(|_request, mut stream| {
+            let headers = "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\n";
+            stream.write_all(headers.as_bytes()).unwrap();
+            stream.write_all(b"hello ").unwrap();
+            stream.flush().unwrap();
+            thread::sleep(Duration::from_millis(250));
+            let _ = stream.write_all(b"world!");
+            let _ = stream.flush();
+        });
+        let file_url = format!("{}/file.wav", base_url);
+        let temp = tempfile::tempdir().unwrap();
+        let dest_path = temp.path().join("song_vocals.wav");
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_for_cb = cancel.clone();
+
+        let result = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(download_file_async(
+                &test_client(),
+                &file_url,
+                &dest_path,
+                "remote.wav",
+                Some(cancel),
+                move |p| {
+                    if !p.done {
+                        cancel_for_cb.store(true, Ordering::SeqCst);
+                    }
+                },
+            ));
+
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .to_lowercase()
+            .contains("download cancelled"));
+        handle.join().unwrap();
+        assert!(part_path(&dest_path).exists());
+        assert!(meta_path(&part_path(&dest_path)).exists());
+        assert_eq!(std::fs::read(part_path(&dest_path)).unwrap(), b"hello ");
+        assert!(!dest_path.exists());
     }
 }

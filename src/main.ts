@@ -1,9 +1,6 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener';
 import { getThemeList, loadTheme } from './themes';
 import { t, initLocale, getLocale, getAvailableLocales } from './i18n';
+import { backendGateway } from './app/backend/gateway';
 import { readJsonStorage, readTextStorage, writeJsonStorage, writeTextStorage } from './app/storage';
 import { filterLogs, renderLogsPageHtml, type LogEntry } from './app/render/logs';
 import { renderAboutPageHtml } from './app/render/about';
@@ -41,19 +38,16 @@ import type {
   AlgorithmDetails,
   AlgorithmGroup,
   Config,
-  DownloadProgressPayload,
-  FetchLatestAlgorithmInfoResult,
   FrontendDebugLogArgs,
   LocalAlgorithmListResponse,
   OutputFormat,
   Preset,
-  SaveConfigArgs,
   Task,
   TaskHistoryRecord,
-  UploadProgressPayload,
 } from './app/types';
 
 type UiActionStatusPhase = 'running' | 'success' | 'error';
+type PageId = 'home' | 'tasks' | 'algorithms' | 'settings' | 'appearance' | 'logs' | 'about';
 
 interface UiStatusBanner {
   phase: UiActionStatusPhase;
@@ -61,12 +55,19 @@ interface UiStatusBanner {
   showLogsShortcut: boolean;
 }
 
+interface PageDefinition {
+  id: PageId;
+  icon: string;
+  loadsQueueInfo?: boolean;
+  render: () => string;
+}
+
 class App {
   private readonly placeholderApiToken = 'mvsep-demo-key';
   private readonly defaultAlgorithmAutoRefreshDays = 15;
   private readonly settingsAutoSaveDebounceMs = 700;
   private readonly apiKeyGuideDismissStorageKey = 'mvsep_api_key_guide_dismissed_v1';
-  private currentPage: string = 'home';
+  private currentPage: PageId = 'home';
   private config: Config | null = null;
   private tasks: Task[] = [];
   private algorithms: AlgorithmGroup[] = [];
@@ -121,7 +122,7 @@ class App {
   private uploadPercent: number = 0;
   private uploadFailed: boolean = false;
   private isShellMounted: boolean = false;
-  private lastRenderedPage: string | null = null;
+  private lastRenderedPage: PageId | null = null;
   private backendLogPollTimer: number | null = null;
   private queueInfoLastFetchAt: number = 0;
   private queueInfoInFlight: Promise<void> | null = null;
@@ -147,11 +148,54 @@ class App {
   private isTokenVisible: boolean = false;
   private activeTasksSaveTimer: number | null = null;
   private readonly activeTasksSaveDebounceMs: number = 500;
+  private activeTasksSaveChain: Promise<void> = Promise.resolve();
+  private taskHistorySaveChain: Promise<void> = Promise.resolve();
+  private activeTasksLoadedFromFallback: boolean = false;
+  private taskHistoryLoadedFromFallback: boolean = false;
   private settingsAutoSaveTimer: number | null = null;
   private showApiKeyGuide: boolean = false;
   private lastAutoSaveErrorAt: number = 0;
   private readonly minPollIntervalSeconds: number = 1;
   private readonly maxPollIntervalSeconds: number = 60;
+  private readonly pageRegistry: Record<PageId, PageDefinition> = {
+    home: {
+      id: 'home',
+      icon: '🏠',
+      loadsQueueInfo: true,
+      render: () => this.renderHomePage(),
+    },
+    tasks: {
+      id: 'tasks',
+      icon: '🎵',
+      loadsQueueInfo: true,
+      render: () => this.renderTasksPage(),
+    },
+    algorithms: {
+      id: 'algorithms',
+      icon: '🔍',
+      render: () => this.renderAlgorithmsPage(),
+    },
+    settings: {
+      id: 'settings',
+      icon: '⚙️',
+      render: () => this.renderSettingsPage(),
+    },
+    appearance: {
+      id: 'appearance',
+      icon: '🎨',
+      render: () => this.renderAppearancePage(),
+    },
+    logs: {
+      id: 'logs',
+      icon: '📋',
+      render: () => this.renderLogsPage(),
+    },
+    about: {
+      id: 'about',
+      icon: 'ℹ️',
+      render: () => this.renderAboutPage(),
+    },
+  };
 
   constructor() {
     this.init();
@@ -168,8 +212,8 @@ class App {
     this.setupDownloadProgressListener();
     this.setupUploadProgressListener();
     this.initFrontendLogs();
-    this.loadTaskHistory();
-    this.loadActiveTasks();
+    await this.loadTaskHistory();
+    await this.loadActiveTasks();
     this.loadPresets();
     this.startBackendLogPolling();
     this.setupFrontendDebugHooks();
@@ -179,8 +223,7 @@ class App {
   }
 
   setupDownloadProgressListener() {
-    void listen<DownloadProgressPayload>('download-progress', (event) => {
-      const payload = event.payload;
+    void backendGateway.onDownloadProgress((payload) => {
       const task = this.tasks.find(t => t.hash === payload.hash);
       if (!task) return;
       task.phase = payload.done ? 'done' : 'downloading';
@@ -192,12 +235,14 @@ class App {
       if (this.shouldRenderTaskUpdates()) {
         this.requestTaskPanelsRefresh();
       }
+    }).catch((e) => {
+      console.error('Failed to register download progress listener:', e);
+      void this.sendDebugLog('ERROR', `download progress listener registration failed: ${String(e)}`);
     });
   }
 
   setupUploadProgressListener() {
-    void listen<UploadProgressPayload>('upload-progress', (event) => {
-      const payload = event.payload;
+    void backendGateway.onUploadProgress((payload) => {
       this.uploadFileName = payload.file_name;
       this.uploadBytes = payload.uploaded_bytes;
       this.uploadTotalBytes = payload.total_bytes;
@@ -212,6 +257,9 @@ class App {
       if (this.currentPage === 'home') {
         this.render();
       }
+    }).catch((e) => {
+      console.error('Failed to register upload progress listener:', e);
+      void this.sendDebugLog('ERROR', `upload progress listener registration failed: ${String(e)}`);
     });
   }
 
@@ -226,7 +274,7 @@ class App {
 
   async sendDebugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string) {
     try {
-      await invoke<void>('frontend_debug_log', { level, message } satisfies FrontendDebugLogArgs);
+      await backendGateway.sendFrontendDebugLog({ level, message } satisfies FrontendDebugLogArgs);
     } catch {
       // ignore debug bridge failures
     }
@@ -266,12 +314,12 @@ class App {
     this.render();
   }
 
-  private setActionRunning(actionKey: string, running: boolean) {
+  setActionRunning(actionKey: string, running: boolean) {
     if (running) this.runningActions.add(actionKey);
     else this.runningActions.delete(actionKey);
   }
 
-  private isActionRunning(actionKey: string): boolean {
+  isActionRunning(actionKey: string): boolean {
     return this.runningActions.has(actionKey);
   }
 
@@ -652,8 +700,12 @@ class App {
     this.render();
   }
 
+  private isPageId(page: string): page is PageId {
+    return Object.prototype.hasOwnProperty.call(this.pageRegistry, page);
+  }
+
   private shouldLoadQueueInfoForPage(page: string): boolean {
-    return page === 'home' || page === 'tasks';
+    return this.isPageId(page) && this.pageRegistry[page].loadsQueueInfo === true;
   }
 
   getTargetElement(event: Event): HTMLElement | null {
@@ -717,7 +769,7 @@ class App {
     this.queueInfoInFlight = (async () => {
       const previous = this.queueInfo;
       try {
-        const info = await invoke<{ active: number; queued: number }>('get_queue_info', {
+        const info = await backendGateway.getQueueInfo({
           apiUrl,
           token,
         });
@@ -754,13 +806,155 @@ class App {
     return 'mvsep_active_tasks_v1';
   }
 
-  loadActiveTasks() {
+  private getActiveTasksMigrationKey() {
+    return 'mvsep_active_tasks_migrated_to_tasks_db_v1';
+  }
+
+  private getTaskHistoryStorageKey() {
+    return 'mvsep_task_history';
+  }
+
+  private getTaskHistoryMigrationKey() {
+    return 'mvsep_task_history_migrated_to_tasks_db_v1';
+  }
+
+  private cloneTask(task: Task): Task {
+    return { ...task, output_files: [...task.output_files] };
+  }
+
+  private cloneHistoryRecord(record: TaskHistoryRecord): TaskHistoryRecord {
+    return { ...record, outputFiles: [...record.outputFiles] };
+  }
+
+  private isActiveTask(task: Task): boolean {
+    return task.status !== 'done' && task.status !== 'failed';
+  }
+
+  private mergeActiveTasks(backendTasks: Task[], localTasks: Task[], shouldImportLocal: boolean): Task[] {
+    const backendHashes = new Set(backendTasks.map(task => task.hash));
+    const backendActiveTasks = backendTasks.filter(task => this.isActiveTask(task));
+    const localOnlyTasks = shouldImportLocal
+      ? localTasks.filter(task => this.isActiveTask(task) && !backendHashes.has(task.hash))
+      : [];
+    return [...backendActiveTasks, ...localOnlyTasks].sort((a, b) => b.created_at - a.created_at);
+  }
+
+  private historyRecordTime(record: TaskHistoryRecord): number {
+    return record.completedAt ?? record.createdAt;
+  }
+
+  private chooseHistoryRecord(existing: TaskHistoryRecord, candidate: TaskHistoryRecord): TaskHistoryRecord {
+    const existingTime = this.historyRecordTime(existing);
+    const candidateTime = this.historyRecordTime(candidate);
+    if (candidateTime !== existingTime) {
+      return candidateTime > existingTime ? candidate : existing;
+    }
+    if (!!candidate.outputPath !== !!existing.outputPath) {
+      return candidate.outputPath ? candidate : existing;
+    }
+    if (candidate.outputFiles.length !== existing.outputFiles.length) {
+      return candidate.outputFiles.length > existing.outputFiles.length ? candidate : existing;
+    }
+    return candidate;
+  }
+
+  private normalizeTaskHistory(records: TaskHistoryRecord[]): TaskHistoryRecord[] {
+    const merged = new Map<string, TaskHistoryRecord>();
+    for (const record of records) {
+      const existing = merged.get(record.id);
+      merged.set(record.id, existing ? this.chooseHistoryRecord(existing, record) : record);
+    }
+    return [...merged.values()]
+      .sort((a, b) => this.historyRecordTime(b) - this.historyRecordTime(a))
+      .slice(0, 100);
+  }
+
+  private mergeTaskHistory(
+    backendHistory: TaskHistoryRecord[],
+    localHistory: TaskHistoryRecord[],
+    shouldImportLocal: boolean,
+  ): TaskHistoryRecord[] {
+    const merged = new Map<string, TaskHistoryRecord>();
+    if (shouldImportLocal) {
+      for (const record of this.normalizeTaskHistory(localHistory)) {
+        merged.set(record.id, record);
+      }
+    }
+    for (const record of this.normalizeTaskHistory(backendHistory)) {
+      merged.set(record.id, record);
+    }
+    return [...merged.values()]
+      .sort((a, b) => this.historyRecordTime(b) - this.historyRecordTime(a))
+      .slice(0, 100);
+  }
+
+  private enqueueActiveTasksBackendSave(tasks: Task[]): Promise<void> {
+    const snapshot = tasks.filter(task => this.isActiveTask(task)).map(task => this.cloneTask(task));
+    this.activeTasksSaveChain = this.activeTasksSaveChain
+      .catch(() => undefined)
+      .then(() => backendGateway.replaceActiveTasks({ tasks: snapshot }))
+      .catch((e) => {
+        console.error('Failed to save active tasks to backend store:', e);
+        throw e;
+      });
+    return this.activeTasksSaveChain;
+  }
+
+  private enqueueTaskHistoryBackendSave(records: TaskHistoryRecord[]): Promise<void> {
+    const snapshot = this.normalizeTaskHistory(records).map(record => this.cloneHistoryRecord(record));
+    this.taskHistorySaveChain = this.taskHistorySaveChain
+      .catch(() => undefined)
+      .then(() => backendGateway.saveTaskHistory({ records: snapshot }))
+      .catch((e) => {
+        console.error('Failed to save task history to backend store:', e);
+        throw e;
+      });
+    return this.taskHistorySaveChain;
+  }
+
+  private enqueueTaskCompletionBackendSave(task: Task, record: TaskHistoryRecord): Promise<void> {
+    const taskSnapshot = this.cloneTask(task);
+    const recordSnapshot = this.cloneHistoryRecord(record);
+    const completion = Promise
+      .all([
+        this.activeTasksSaveChain.catch(() => undefined),
+        this.taskHistorySaveChain.catch(() => undefined),
+      ])
+      .then(() => backendGateway.completeTask({ task: taskSnapshot, record: recordSnapshot }))
+      .catch((e) => {
+        console.error('Failed to complete task in backend store:', e);
+        throw e;
+      });
+    this.activeTasksSaveChain = completion;
+    this.taskHistorySaveChain = completion;
+    return completion;
+  }
+
+  async loadActiveTasks() {
     try {
-      const parsed = readJsonStorage<Task[]>(this.getActiveTasksStorageKey(), []);
-      this.tasks = parsed.filter(t => t.status !== 'done' && t.status !== 'failed');
+      const localTasks = readJsonStorage<Task[]>(this.getActiveTasksStorageKey(), []);
+      let parsed = localTasks;
+      try {
+        const backendTasks = await backendGateway.getTasks();
+        this.activeTasksLoadedFromFallback = false;
+        const shouldImportLocal =
+          backendTasks.length === 0
+          && localTasks.length > 0
+          && readTextStorage(this.getActiveTasksMigrationKey()) !== '1';
+        parsed = this.mergeActiveTasks(backendTasks, localTasks, shouldImportLocal);
+        if (shouldImportLocal) {
+          await this.enqueueActiveTasksBackendSave(parsed);
+        }
+        writeTextStorage(this.getActiveTasksMigrationKey(), '1');
+      } catch (e) {
+        console.error('Failed to load active tasks from backend store:', e);
+        this.activeTasksLoadedFromFallback = true;
+      }
+      this.tasks = parsed.filter(t => this.isActiveTask(t));
       for (const task of this.tasks) {
         task.phase = this.getPhaseFromStatus(task.status);
       }
+      writeJsonStorage(this.getActiveTasksStorageKey(), this.tasks);
       for (const task of this.tasks) {
         this.startPolling(task.hash);
         void this.pollTaskStatus(task.hash);
@@ -771,14 +965,14 @@ class App {
     }
   }
 
-  saveActiveTasks(force: boolean = false) {
+  async saveActiveTasks(force: boolean = false): Promise<void> {
     if (!force) {
       if (this.activeTasksSaveTimer !== null) {
         clearTimeout(this.activeTasksSaveTimer);
       }
       this.activeTasksSaveTimer = window.setTimeout(() => {
         this.activeTasksSaveTimer = null;
-        this.saveActiveTasks(true);
+        void this.saveActiveTasks(true).catch(() => undefined);
       }, this.activeTasksSaveDebounceMs);
       return;
     }
@@ -788,29 +982,53 @@ class App {
       this.activeTasksSaveTimer = null;
     }
 
-    const activeTasks = this.tasks.filter(t => t.status !== 'done' && t.status !== 'failed');
+    const activeTasks = this.tasks.filter(t => this.isActiveTask(t));
     const ok = writeJsonStorage(this.getActiveTasksStorageKey(), activeTasks);
     if (!ok) {
       console.error('Failed to save active tasks');
     }
-  }
-
-  loadTaskHistory() {
-    this.taskHistory = readJsonStorage<TaskHistoryRecord[]>('mvsep_task_history', []);
-  }
-
-  saveTaskHistory() {
-    // Keep only last 100 records
-    if (this.taskHistory.length > 100) {
-      this.taskHistory = this.taskHistory.slice(-100);
+    if (this.activeTasksLoadedFromFallback) {
+      return;
     }
-    const ok = writeJsonStorage('mvsep_task_history', this.taskHistory);
+    await this.enqueueActiveTasksBackendSave(activeTasks);
+  }
+
+  async loadTaskHistory() {
+    const localHistory = readJsonStorage<TaskHistoryRecord[]>(this.getTaskHistoryStorageKey(), []);
+    try {
+      const backendHistory = await backendGateway.getTaskHistory();
+      this.taskHistoryLoadedFromFallback = false;
+      const shouldImportLocal =
+        backendHistory.length === 0
+        && localHistory.length > 0
+        && readTextStorage(this.getTaskHistoryMigrationKey()) !== '1';
+      this.taskHistory = this.mergeTaskHistory(backendHistory, localHistory, shouldImportLocal);
+      if (shouldImportLocal) {
+        await this.enqueueTaskHistoryBackendSave(this.taskHistory);
+      }
+      writeTextStorage(this.getTaskHistoryMigrationKey(), '1');
+      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+    } catch (e) {
+      console.error('Failed to load task history from backend store:', e);
+      this.taskHistoryLoadedFromFallback = true;
+      this.taskHistory = localHistory;
+    }
+  }
+
+  async saveTaskHistory(): Promise<void> {
+    // Keep only last 100 records
+    this.taskHistory = this.normalizeTaskHistory(this.taskHistory);
+    const ok = writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
     if (!ok) {
       console.error('Failed to save task history');
     }
+    if (this.taskHistoryLoadedFromFallback) {
+      throw new Error('Task history backend unavailable; local fallback is read-only');
+    }
+    await this.enqueueTaskHistoryBackendSave(this.taskHistory);
   }
 
-  addToHistory(task: Task, outputPath: string | null = null) {
+  async addToHistory(task: Task, outputPath: string | null = null): Promise<void> {
     const format = this.formats.find(f => f.id === task.format);
     const record: TaskHistoryRecord = {
       id: task.hash,
@@ -833,29 +1051,66 @@ class App {
       error: task.error,
     };
     const existingIndex = this.taskHistory.findIndex(item => item.id === record.id);
+    const nextHistory = [...this.taskHistory];
     if (existingIndex >= 0) {
-      this.taskHistory.splice(existingIndex, 1);
+      nextHistory.splice(existingIndex, 1);
     }
-    this.taskHistory.unshift(record);
-    this.saveTaskHistory();
+    nextHistory.unshift(record);
+    await this.enqueueTaskCompletionBackendSave(task, record);
+    this.taskHistory = this.normalizeTaskHistory(nextHistory);
+    const ok = writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+    if (!ok) {
+      console.error('Failed to save task history');
+    }
   }
 
-  deleteFromHistory(id: string) {
+  async deleteFromHistory(id: string): Promise<void> {
+    const previous = this.taskHistory;
     this.taskHistory = this.taskHistory.filter(t => t.id !== id);
-    this.saveTaskHistory();
+    try {
+      await this.saveTaskHistory();
+    } catch (e) {
+      this.taskHistory = previous;
+      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+      throw e;
+    }
   }
 
-  clearHistory() {
+  async clearHistory(): Promise<void> {
+    const previous = this.taskHistory;
     this.taskHistory = [];
-    this.saveTaskHistory();
+    try {
+      await this.saveTaskHistory();
+    } catch (e) {
+      this.taskHistory = previous;
+      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+      throw e;
+    }
   }
 
   initializeCustomThemeDraft() {
     const styles = getComputedStyle(document.documentElement);
     this.customThemeDraft = {
-      primary: styles.getPropertyValue('--color-primary').trim() || '#0891B2',
-      bgPrimary: styles.getPropertyValue('--color-bg-primary').trim() || '#ECFEFF',
-      textPrimary: styles.getPropertyValue('--color-text-primary').trim() || '#164E63',
+      primary: this.normalizeHexColor(styles.getPropertyValue('--color-primary').trim(), '#0891B2'),
+      bgPrimary: this.normalizeHexColor(styles.getPropertyValue('--color-bg-primary').trim(), '#ECFEFF'),
+      textPrimary: this.normalizeHexColor(styles.getPropertyValue('--color-text-primary').trim(), '#164E63'),
+    };
+  }
+
+  private normalizeHexColor(value: string | null | undefined, fallback: string): string {
+    const candidate = String(value || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(candidate) ? candidate : fallback;
+  }
+
+  private normalizeThemeDraft(draft: { primary: string; bgPrimary: string; textPrimary: string }): {
+    primary: string;
+    bgPrimary: string;
+    textPrimary: string;
+  } {
+    return {
+      primary: this.normalizeHexColor(draft.primary, '#0891B2'),
+      bgPrimary: this.normalizeHexColor(draft.bgPrimary, '#ECFEFF'),
+      textPrimary: this.normalizeHexColor(draft.textPrimary, '#164E63'),
     };
   }
 
@@ -867,13 +1122,14 @@ class App {
       null,
     );
     if (!custom) return;
-    document.documentElement.style.setProperty('--color-primary', custom.primary);
-    document.documentElement.style.setProperty('--color-primary-light', custom.primary);
-    document.documentElement.style.setProperty('--color-cta', custom.primary);
-    document.documentElement.style.setProperty('--color-bg-primary', custom.bgPrimary);
-    document.documentElement.style.setProperty('--color-text-primary', custom.textPrimary);
+    const sanitized = this.normalizeThemeDraft(custom);
+    document.documentElement.style.setProperty('--color-primary', sanitized.primary);
+    document.documentElement.style.setProperty('--color-primary-light', sanitized.primary);
+    document.documentElement.style.setProperty('--color-cta', sanitized.primary);
+    document.documentElement.style.setProperty('--color-bg-primary', sanitized.bgPrimary);
+    document.documentElement.style.setProperty('--color-text-primary', sanitized.textPrimary);
     document.documentElement.setAttribute('data-theme', 'custom');
-    this.customThemeDraft = custom;
+    this.customThemeDraft = sanitized;
   }
 
   getFilteredHistory() {
@@ -979,7 +1235,7 @@ class App {
 
   async loadBackendLogs(): Promise<boolean> {
     try {
-      const logs = await invoke<LogEntry[]>('get_backend_logs');
+      const logs = await backendGateway.getBackendLogs();
       const changed = this.hasLogListChanged(this.backendLogs, logs);
       this.backendLogs = logs;
       return changed;
@@ -991,7 +1247,7 @@ class App {
 
   async loadConfig() {
     try {
-      this.config = await invoke<Config>('load_config');
+      this.config = await backendGateway.loadConfig();
       this.config.token = this.config.token?.trim() || '';
       if (this.config.mirror && (!this.config.api_url || this.config.api_url.includes('mvsep.com'))) {
         this.config.api_url = this.getApiUrlByMirror(this.config.mirror);
@@ -1019,7 +1275,7 @@ class App {
 
   async loadAlgorithmCachePath() {
     try {
-      this.algorithmCachePath = await invoke<string>('get_algorithm_cache_path_cmd');
+      this.algorithmCachePath = await backendGateway.getAlgorithmCachePath();
     } catch (e) {
       console.error('Failed to load algorithm cache path:', e);
       this.algorithmCachePath = null;
@@ -1028,7 +1284,7 @@ class App {
 
   async saveConfig(config: Config): Promise<boolean> {
     try {
-      await invoke<void>('save_config', { config } satisfies SaveConfigArgs);
+      await backendGateway.saveConfig({ config });
       this.config = config;
       return true;
     } catch (e) {
@@ -1078,7 +1334,7 @@ class App {
           errorMessage: t('algorithm.refreshListFailed'),
         },
         async () => {
-          const result = await invoke<LocalAlgorithmListResponse>('refresh_algorithm_list_from_local');
+          const result: LocalAlgorithmListResponse = await backendGateway.refreshAlgorithmListFromLocal();
           this.lastAlgorithmCacheUpdatedAt = result.updated_at || null;
           this.algorithms = result.groups;
           if (syncSearch) {
@@ -1133,21 +1389,23 @@ class App {
     }
     const shouldRender = options.render !== false;
     const showNotice = options.showNotice !== false;
+    const actionKey = 'algo-fetch-latest';
+    if (this.isActionRunning(actionKey)) return;
 
     this.isLoadingAlgorithmDetails = true;
     if (shouldRender) this.render();
     try {
       await this.withUiAction(
-        'algo-fetch-latest',
+        actionKey,
         {
           runningMessage: t('algorithm.fetchLatestRunning'),
           successMessage: showNotice ? t('algorithm.latestFetched') : '',
           errorMessage: t('algorithm.fetchLatestFailedWithConnectionHint'),
         },
         async () => {
-          await invoke<FetchLatestAlgorithmInfoResult>('fetch_latest_algorithm_info', {
-            apiUrl: this.config?.api_url,
-            token: this.config?.token,
+          await backendGateway.fetchLatestAlgorithmInfo({
+            apiUrl: this.config?.api_url ?? null,
+            token: this.config?.token ?? null,
             proxyMode: this.config?.proxy_mode,
             proxyHost: this.config?.proxy_host,
             proxyPort: this.config?.proxy_port,
@@ -1183,7 +1441,7 @@ class App {
     }
     
     try {
-      this.formats = await invoke<OutputFormat[]>('list_formats', {
+      this.formats = await backendGateway.listFormats({
         apiUrl: this.config.api_url,
         token: this.config.token,
       });
@@ -1204,7 +1462,7 @@ class App {
     if (algorithmId <= 0) return null;
     void this.sendDebugLog('INFO', `loadAlgorithmDetails start from local cache: id=${algorithmId}`);
     try {
-      const details = await invoke<AlgorithmDetails>('get_algorithm_details_from_local', {
+      const details = await backendGateway.getAlgorithmDetailsFromLocal({
         algorithmId,
       });
       this.algorithmDetails.set(algorithmId, details);
@@ -1250,8 +1508,9 @@ class App {
   }
 
   navigate(page: string) {
-    this.currentPage = page;
-    if (this.shouldLoadQueueInfoForPage(page)) {
+    const nextPage = this.isPageId(page) ? page : 'home';
+    this.currentPage = nextPage;
+    if (this.shouldLoadQueueInfoForPage(nextPage)) {
       void this.loadQueueInfo(false);
     }
     this.render();
@@ -1259,7 +1518,7 @@ class App {
 
   async selectFile() {
     try {
-      const selected = await openDialog({
+      const selected = await backendGateway.openFileDialog({
         multiple: false,
         filters: [{
           name: 'Audio',
@@ -1357,7 +1616,7 @@ class App {
     this.render();
 
     try {
-      const hash = await invoke<string>('create_task', {
+      const hash = await backendGateway.createTask({
         filePath: this.selectedFile,
         sepType: this.selectedAlgorithm,
         opt1: this.selectedOpt1,
@@ -1398,7 +1657,7 @@ class App {
       };
 
       this.tasks.push(task);
-      this.saveActiveTasks();
+      await this.saveActiveTasks(true);
       void this.sendDebugLog('INFO', `createTaskFromCurrentSelection success: hash=${hash}`);
       this.render();
       return hash;
@@ -1432,7 +1691,16 @@ class App {
         this.stopPolling(hash);
         task.status = 'failed';
         task.error = `Timeout after ${timeoutSeconds}s`;
-        this.addToHistory(task, this.config?.output_dir || null);
+        let completionPersisted = false;
+        try {
+          await this.addToHistory(task, this.config?.output_dir || null);
+          completionPersisted = true;
+        } catch (e) {
+          console.error('Failed to persist task history:', e);
+        }
+        if (completionPersisted) {
+          await this.saveActiveTasks(true);
+        }
         throw new Error(task.error);
       }
       await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
@@ -1568,7 +1836,7 @@ class App {
     await cancelDownloadTask(this as unknown as TaskServiceContext, hash);
   }
 
-  deleteTask(hash: string) {
+  async deleteTask(hash: string): Promise<void> {
     const task = this.tasks.find(t => t.hash === hash);
     if (task) {
       const phase = task.phase || this.getPhaseFromStatus(task.status);
@@ -1581,7 +1849,7 @@ class App {
     if (!this.confirmAction('Delete this task from local list? This cannot be undone.')) return;
     this.stopPolling(hash);
     this.tasks = this.tasks.filter(t => t.hash !== hash);
-    this.saveActiveTasks(true);
+    await this.saveActiveTasks(true);
     this.requestTaskPanelsRefresh();
   }
 
@@ -1591,7 +1859,7 @@ class App {
     void this.sendDebugLog('INFO', `openOutput requested: ${normalized}`);
     const isLinux = /linux/i.test(navigator.userAgent);
     try {
-      await invoke<void>('open_in_file_manager', { path: normalized });
+      await backendGateway.openInFileManager({ path: normalized });
       this.addFrontendLog('INFO', `Open output succeeded: ${normalized}`);
       void this.sendDebugLog('INFO', `openOutput succeeded via backend: ${normalized}`);
       return true;
@@ -1602,7 +1870,7 @@ class App {
         if (this.config?.output_dir) {
           try {
             const fallback = await this.resolveToAbsolutePath(this.config.output_dir);
-            await invoke<void>('open_in_file_manager', { path: fallback });
+            await backendGateway.openInFileManager({ path: fallback });
             this.addFrontendLog('INFO', `Open output fallback succeeded: ${fallback}`);
             void this.sendDebugLog('INFO', `openOutput fallback succeeded via backend: ${fallback}`);
             return true;
@@ -1615,13 +1883,13 @@ class App {
         return false;
       }
       try {
-        await revealItemInDir(normalized);
+        await backendGateway.revealItemInDir(normalized);
         this.addFrontendLog('INFO', `Reveal in dir succeeded: ${normalized}`);
         void this.sendDebugLog('INFO', `openOutput succeeded via revealItemInDir: ${normalized}`);
         return true;
       } catch (err) {
         try {
-          await openPath(normalized);
+          await backendGateway.openPath(normalized);
           this.addFrontendLog('INFO', `openPath succeeded: ${normalized}`);
           void this.sendDebugLog('INFO', `openOutput succeeded via openPath: ${normalized}`);
           return true;
@@ -1631,7 +1899,7 @@ class App {
         if (this.config?.output_dir) {
           try {
             const fallback = await this.resolveToAbsolutePath(this.config.output_dir);
-            await invoke<void>('open_in_file_manager', { path: fallback });
+            await backendGateway.openInFileManager({ path: fallback });
             void this.sendDebugLog('INFO', `openOutput fallback succeeded via backend: ${fallback}`);
             return true;
           } catch (_) {
@@ -1677,7 +1945,7 @@ class App {
       return path;
     }
     try {
-      const absolute = await invoke<string>('resolve_path', { path });
+      const absolute = await backendGateway.resolvePath({ path });
       return absolute;
     } catch {
       return path;
@@ -1686,7 +1954,8 @@ class App {
 
   saveCustomTheme() {
     if (!this.customThemeDraft) return;
-    const draft = this.customThemeDraft;
+    const draft = this.normalizeThemeDraft(this.customThemeDraft);
+    this.customThemeDraft = draft;
     document.documentElement.style.setProperty('--color-primary', draft.primary);
     document.documentElement.style.setProperty('--color-primary-light', draft.primary);
     document.documentElement.style.setProperty('--color-cta', draft.primary);
@@ -1716,7 +1985,7 @@ class App {
           errorMessage: t('settings.chooseFolderFailed'),
         },
         async () => {
-          const selected = await openDialog({
+          const selected = await backendGateway.openFileDialog({
             directory: true,
             multiple: false,
           });
@@ -1752,9 +2021,9 @@ class App {
           successMessage: t('settings.connectionSucceeded'),
           errorMessage: t('settings.connectionFailed'),
         },
-        async () => invoke<boolean>('test_connection', {
-          token: this.config?.token,
-          apiUrl: this.config?.api_url,
+        async () => backendGateway.testConnection({
+          token: this.config?.token ?? null,
+          apiUrl: this.config?.api_url ?? null,
         }),
       );
       if (result === null) return;
@@ -2017,15 +2286,7 @@ class App {
   }
 
   renderSidebar() {
-    const navItems = [
-      { id: 'home', icon: '🏠', label: t('nav.home') },
-      { id: 'tasks', icon: '🎵', label: t('nav.tasks') },
-      { id: 'algorithms', icon: '🔍', label: t('nav.algorithms') },
-      { id: 'settings', icon: '⚙️', label: t('nav.settings') },
-      { id: 'appearance', icon: '🎨', label: t('nav.appearance') },
-      { id: 'logs', icon: '📋', label: t('nav.logs') },
-      { id: 'about', icon: 'ℹ️', label: t('nav.about') },
-    ];
+    const navItems = Object.values(this.pageRegistry);
 
     return `
       <aside class="sidebar">
@@ -2042,7 +2303,7 @@ class App {
               aria-current="${this.currentPage === item.id ? 'page' : 'false'}"
             >
               <span>${item.icon}</span>
-              <span>${item.label}</span>
+              <span>${t(`nav.${item.id}`)}</span>
             </button>
           `).join('')}
         </nav>
@@ -2091,16 +2352,7 @@ class App {
   }
 
   renderPage() {
-    switch (this.currentPage) {
-      case 'home': return this.renderHomePage();
-      case 'tasks': return this.renderTasksPage();
-      case 'algorithms': return this.renderAlgorithmsPage();
-      case 'settings': return this.renderSettingsPage();
-      case 'appearance': return this.renderAppearancePage();
-      case 'logs': return this.renderLogsPage();
-      case 'about': return this.renderAboutPage();
-      default: return this.renderHomePage();
-    }
+    return this.pageRegistry[this.currentPage]?.render() ?? this.renderHomePage();
   }
 
   private renderHomeCurrentTasksSection(): string {
@@ -2158,7 +2410,7 @@ class App {
           <div class="flex gap-2">
             <select class="select" id="home-preset-select">
               ${this.presets.map(p => `
-                <option value="${p.id}" ${p.id === this.selectedHomePresetId ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>
+                <option value="${this.escapeHtml(p.id)}" ${p.id === this.selectedHomePresetId ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>
               `).join('')}
             </select>
             <button class="btn btn-secondary whitespace-nowrap" data-action="apply-home-preset">${t('common.load')}</button>
@@ -2384,6 +2636,7 @@ class App {
       isTestingConnection: this.isActionRunning('settings-test-connection'),
       isChoosingOutputDir: this.isActionRunning('settings-choose-output'),
       isSavingSettings: this.isActionRunning('settings-save'),
+      escapeHtml: (value) => this.escapeHtml(value),
       t,
     });
   }
@@ -2418,9 +2671,22 @@ class App {
   }
 
   escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text).replace(/[&<>"']/g, (char) => {
+      switch (char) {
+        case '&':
+          return '&amp;';
+        case '<':
+          return '&lt;';
+        case '>':
+          return '&gt;';
+        case '"':
+          return '&quot;';
+        case "'":
+          return '&#039;';
+        default:
+          return char;
+      }
+    });
   }
 
   getFilteredLogs() {

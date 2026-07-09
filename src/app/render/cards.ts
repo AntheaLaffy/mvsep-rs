@@ -2,6 +2,11 @@ import type { Task, TaskHistoryRecord } from '../types';
 
 type TranslateFn = (key: string) => string;
 
+function clampPercent(value: number | null | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 interface RenderTaskCardArgs {
   task: Task;
   phase: NonNullable<Task['phase']>;
@@ -20,17 +25,20 @@ interface RenderTaskCardArgs {
 
 export function renderTaskCardHtml(args: RenderTaskCardArgs): string {
   const { task } = args;
+  const taskHash = args.escapeHtml(task.hash);
+  const progressPercent = clampPercent(task.progress);
+  const downloadPercent = clampPercent(task.download_percent);
   return `
-      <div class="p-4 bg-bg-primary rounded-lg border border-border" data-task-hash="${task.hash}">
+      <div class="p-4 bg-bg-primary rounded-lg border border-border" data-task-hash="${taskHash}">
         <div class="flex items-center justify-between mb-2">
-          <span class="font-medium">🎧 ${args.escapeHtml(task.file_name)}</span>
-          <span class="status-badge ${args.statusClass}">${args.statusText}</span>
+          <span class="font-medium min-w-0 flex-1 break-words">🎧 ${args.escapeHtml(task.file_name)}</span>
+          <span class="status-badge ${args.statusClass} shrink-0">${args.statusText}</span>
         </div>
         ${args.phase === 'separating' ? `
           <div class="progress-bar mb-2">
-            <div class="progress-bar-fill" style="width: ${task.progress}%"></div>
+            <div class="progress-bar-fill" style="width: ${progressPercent}%"></div>
           </div>
-          <p class="text-sm text-text-muted">${task.progress.toFixed(0)}%</p>
+          <p class="text-sm text-text-muted">${progressPercent.toFixed(0)}%</p>
         ` : ''}
         ${args.phase === 'queueing' ? `
           <p class="text-sm text-text-muted mb-2">
@@ -39,10 +47,10 @@ export function renderTaskCardHtml(args: RenderTaskCardArgs): string {
         ` : ''}
         ${args.phase === 'downloading' ? `
           <div class="progress-bar mb-2">
-            <div class="progress-bar-fill" style="width: ${task.download_percent ?? 0}%"></div>
+            <div class="progress-bar-fill" style="width: ${downloadPercent}%"></div>
           </div>
           <p class="text-sm text-text-muted mb-1">
-            ${task.download_file_name ? `${args.t('task.fileLabel')}: ${args.escapeHtml(task.download_file_name)} / ` : ''}${(task.download_percent ?? 0).toFixed(1)}%
+            ${task.download_file_name ? `${args.t('task.fileLabel')}: ${args.escapeHtml(task.download_file_name)} / ` : ''}${downloadPercent.toFixed(1)}%
           </p>
           <p class="text-sm text-text-muted">
             ${args.formatBytes(task.download_bytes)} / ${args.formatBytes(task.download_total_bytes)} · ${args.formatBytes(task.download_speed_bps)}/s
@@ -53,7 +61,7 @@ export function renderTaskCardHtml(args: RenderTaskCardArgs): string {
           ${task.output_files.length > 0 ? `
             <div class="mb-2">
               <label class="block text-xs text-text-muted mb-1">${args.t('task.downloadTarget')}</label>
-              <select class="select text-sm" data-action="select-download-target" data-hash="${task.hash}">
+              <select class="select text-sm" data-action="select-download-target" data-hash="${taskHash}">
                 <option value="-1" ${args.selectedDownloadIndex === null ? 'selected' : ''}>${args.t('task.downloadAll')}</option>
                 ${task.output_files.map((f, idx) => `
                   <option value="${idx}" ${args.selectedDownloadIndex === idx ? 'selected' : ''}>${idx + 1}. ${args.escapeHtml(args.getDisplayFileName(f))}</option>
@@ -68,7 +76,7 @@ export function renderTaskCardHtml(args: RenderTaskCardArgs): string {
         ${task.message ? `<p class="text-sm text-text-muted mb-2">${args.escapeHtml(task.message)}</p>` : ''}
         ${args.isExpanded ? `
           <div class="mt-2 p-3 rounded-lg bg-bg-secondary border border-border text-sm text-text-secondary">
-            <p>Hash: ${args.escapeHtml(task.hash)}</p>
+            <p class="break-all">Hash: ${args.escapeHtml(task.hash)}</p>
             <p>Algorithm: ${args.escapeHtml(task.algorithm_name)} (#${task.algorithm_id})</p>
             <p>Model: ${args.escapeHtml(task.model_name || '-')}</p>
             <p>Format: ${args.escapeHtml(args.formatName)}</p>
@@ -80,7 +88,7 @@ export function renderTaskCardHtml(args: RenderTaskCardArgs): string {
             ${args.isExpanded ? args.t('common.close') : args.t('task.action.view')}
           </button>
           ${task.status === 'done' ? `
-            <button class="btn btn-primary text-sm" data-action="download-task">
+            <button class="btn btn-primary text-sm" data-action="download-task" ${args.phase === 'downloading' ? 'disabled' : ''}>
               📥 ${args.t('task.action.download')}
             </button>
           ` : ''}
@@ -110,11 +118,12 @@ interface RenderHistoryCardArgs {
 
 export function renderHistoryCardHtml(args: RenderHistoryCardArgs): string {
   const { record } = args;
+  const recordId = args.escapeHtml(record.id);
   return `
       <div class="p-4 bg-bg-primary rounded-lg border border-border">
         <div class="flex items-center justify-between mb-2">
-          <span class="font-medium">🎧 ${args.escapeHtml(record.fileName)}</span>
-          <span class="status-badge ${args.statusClass}">${args.statusText}</span>
+          <span class="font-medium min-w-0 flex-1 break-words">🎧 ${args.escapeHtml(record.fileName)}</span>
+          <span class="status-badge ${args.statusClass} shrink-0">${args.statusText}</span>
         </div>
         <div class="text-sm text-text-muted space-y-1">
           <p>📊 ${args.escapeHtml(record.algorithmName)} ${record.modelName ? `(${args.escapeHtml(record.modelName)})` : ''}</p>
@@ -125,11 +134,11 @@ export function renderHistoryCardHtml(args: RenderHistoryCardArgs): string {
         </div>
         <div class="flex gap-2 mt-3">
           ${record.status === 'done' ? `
-            <button class="btn btn-secondary text-sm" data-action="open-history-output" data-id="${record.id}">
+            <button class="btn btn-secondary text-sm" data-action="open-history-output" data-id="${recordId}">
               📂 ${args.t('task.openFolder') || 'Open'}
             </button>
           ` : ''}
-          <button class="btn btn-secondary text-sm" data-action="retry-task" data-id="${record.id}">
+          <button class="btn btn-secondary text-sm" data-action="retry-task" data-id="${recordId}">
             🔄 ${args.t('task.action.retry')}
           </button>
         </div>

@@ -1,5 +1,5 @@
-pub mod paths;
 pub mod console;
+pub mod paths;
 
 use std::path::PathBuf;
 

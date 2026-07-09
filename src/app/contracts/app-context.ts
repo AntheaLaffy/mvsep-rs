@@ -34,7 +34,7 @@ export interface DomEventsContext {
   render(): void;
   downloadTask(hash: string, fileIndex?: number | null): Promise<void>;
   cancelDownload(hash: string): Promise<void>;
-  deleteTask(hash: string): void;
+  deleteTask(hash: string): Promise<void>;
   testConnection(): Promise<void>;
   chooseOutputDir(): Promise<void>;
   saveSettings(): Promise<void>;
@@ -45,8 +45,8 @@ export interface DomEventsContext {
   exportLogs(): void;
   copyLogs(): void;
   confirmAction(message: string): boolean;
-  clearHistory(): void;
-  deleteFromHistory(id: string): void;
+  clearHistory(): Promise<void>;
+  deleteFromHistory(id: string): Promise<void>;
   retryFromHistory(id: string): Promise<void>;
   openOutput(path: string): Promise<boolean>;
   openHistoryOutput(id: string): Promise<boolean>;
@@ -79,13 +79,15 @@ export interface TaskServiceContext {
   normalizeTaskStatus(status: string): string;
   getPhaseFromStatus(status: string): Task['phase'];
   isTerminalStatus(status: string): boolean;
-  addToHistory(task: Task, outputPath?: string | null): void;
-  saveActiveTasks(force?: boolean): void;
+  addToHistory(task: Task, outputPath?: string | null): Promise<void>;
+  saveActiveTasks(force?: boolean): Promise<void>;
   shouldRenderTaskUpdates(): boolean;
   requestTaskPanelsRefresh(): void;
   addFrontendLog(level: string, message: string): void;
   sendDebugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string): Promise<void>;
   getParentPath(path: string): string;
+  setActionRunning(actionKey: string, running: boolean): void;
+  isActionRunning(actionKey: string): boolean;
 }
 
 export type TaskStatusInvoker = (hash: string, apiUrl: string | null, token: string | null) => Promise<TaskStatusPayload>;

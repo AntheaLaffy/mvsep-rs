@@ -42,8 +42,8 @@ export function renderLogsPageHtml(args: RenderLogsPageArgs): string {
             ? 'text-gray-500'
             : 'text-blue-500';
       return `<div class="py-1 border-b border-border last:border-0">
-        <span class="text-text-muted">[${log.timestamp}]</span>
-        <span class="${levelClass} ml-2">[${log.level}]</span>
+        <span class="text-text-muted">[${args.escapeHtml(log.timestamp)}]</span>
+        <span class="${levelClass} ml-2">[${args.escapeHtml(log.level)}]</span>
         <span class="text-text-primary ml-2">${args.escapeHtml(log.message)}</span>
       </div>`;
     })

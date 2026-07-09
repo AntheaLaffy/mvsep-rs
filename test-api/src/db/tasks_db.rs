@@ -30,9 +30,11 @@ pub struct TasksDatabase {
 
 impl TasksDatabase {
     pub fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
-        let path = db_path
-            .map(|p| p.to_string())
-            .unwrap_or_else(|| crate::utils::paths::tasks_db_path().to_string_lossy().to_string());
+        let path = db_path.map(|p| p.to_string()).unwrap_or_else(|| {
+            crate::utils::paths::tasks_db_path()
+                .to_string_lossy()
+                .to_string()
+        });
 
         let conn = Connection::open(&path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL")?;
@@ -44,7 +46,10 @@ impl TasksDatabase {
         };
 
         {
-            let locked = db.conn.lock().map_err(|e| anyhow::anyhow!("Poison error: {}", e))?;
+            let locked = db
+                .conn
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Poison error: {}", e))?;
             run_migrations(&locked)?;
         }
 

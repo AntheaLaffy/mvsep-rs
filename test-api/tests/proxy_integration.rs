@@ -38,7 +38,9 @@ fn api_url() -> String {
 }
 
 fn api_token() -> Option<String> {
-    std::env::var("MVSEP_API_TOKEN").ok().filter(|t| !t.is_empty())
+    std::env::var("MVSEP_API_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
 }
 
 fn build_proxy_client() -> reqwest::blocking::Client {
@@ -68,8 +70,14 @@ fn test_tcp_connection() {
     assert!(!socket_addrs.is_empty(), "No addresses resolved for proxy");
 
     let resolved = socket_addrs[0];
-    let connected = std::net::TcpStream::connect_timeout(&resolved, std::time::Duration::from_secs(5));
-    assert!(connected.is_ok(), "TCP connection to proxy {} failed: {:?}", resolved, connected.err());
+    let connected =
+        std::net::TcpStream::connect_timeout(&resolved, std::time::Duration::from_secs(5));
+    assert!(
+        connected.is_ok(),
+        "TCP connection to proxy {} failed: {:?}",
+        resolved,
+        connected.err()
+    );
 }
 
 /// Verify DNS resolution works
@@ -96,7 +104,11 @@ fn test_generic_http_via_proxy() {
 
     let mut any_ok = false;
     for (name, url) in &test_urls {
-        match client.get(*url).timeout(std::time::Duration::from_secs(8)).send() {
+        match client
+            .get(*url)
+            .timeout(std::time::Duration::from_secs(8))
+            .send()
+        {
             Ok(resp) if resp.status().is_success() => {
                 println!("  ✅ {} responded", name);
                 any_ok = true;
@@ -175,12 +187,24 @@ fn test_toggle_premium() {
     let token = api_token().expect("MVSEP_API_TOKEN not set (required for this test)");
     let client = build_proxy_client();
 
-    for (endpoint, label) in &[("/app/enable_premium", "Enable Premium"), ("/app/disable_premium", "Disable Premium")] {
+    for (endpoint, label) in &[
+        ("/app/enable_premium", "Enable Premium"),
+        ("/app/disable_premium", "Disable Premium"),
+    ] {
         let url = format!("{}/api{}", api_url(), endpoint);
         let form = reqwest::blocking::multipart::Form::new().text("api_token", token.clone());
 
-        let resp = client.post(&url).multipart(form).send().unwrap_or_else(|_| panic!("POST {} failed", endpoint));
-        assert!(resp.status().is_success(), "{} HTTP {}", label, resp.status());
+        let resp = client
+            .post(&url)
+            .multipart(form)
+            .send()
+            .unwrap_or_else(|_| panic!("POST {} failed", endpoint));
+        assert!(
+            resp.status().is_success(),
+            "{} HTTP {}",
+            label,
+            resp.status()
+        );
         println!("  ✅ {}", label);
     }
 }
@@ -192,12 +216,24 @@ fn test_toggle_long_filenames() {
     let token = api_token().expect("MVSEP_API_TOKEN not set (required for this test)");
     let client = build_proxy_client();
 
-    for (endpoint, label) in &[("/app/enable_long_filenames", "Enable Long Filenames"), ("/app/disable_long_filenames", "Disable Long Filenames")] {
+    for (endpoint, label) in &[
+        ("/app/enable_long_filenames", "Enable Long Filenames"),
+        ("/app/disable_long_filenames", "Disable Long Filenames"),
+    ] {
         let url = format!("{}/api{}", api_url(), endpoint);
         let form = reqwest::blocking::multipart::Form::new().text("api_token", token.clone());
 
-        let resp = client.post(&url).multipart(form).send().unwrap_or_else(|_| panic!("POST {} failed", endpoint));
-        assert!(resp.status().is_success(), "{} HTTP {}", label, resp.status());
+        let resp = client
+            .post(&url)
+            .multipart(form)
+            .send()
+            .unwrap_or_else(|_| panic!("POST {} failed", endpoint));
+        assert!(
+            resp.status().is_success(),
+            "{} HTTP {}",
+            label,
+            resp.status()
+        );
         println!("  ✅ {}", label);
     }
 }
@@ -221,7 +257,8 @@ fn test_full_proxy_coverage() {
 
     // 2. TCP
     let t = Instant::now();
-    let connected = std::net::TcpStream::connect_timeout(&addrs[0], std::time::Duration::from_secs(5));
+    let connected =
+        std::net::TcpStream::connect_timeout(&addrs[0], std::time::Duration::from_secs(5));
     assert!(connected.is_ok(), "TCP connection failed");
     println!("  ✅ TCP ({}ms)", t.elapsed().as_millis());
 

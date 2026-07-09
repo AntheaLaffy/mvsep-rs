@@ -1,12 +1,9 @@
+use colored::Colorize;
+use mvsep_api_tester::{db, file_transfer, utils};
+use serde_json::Value;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::Instant;
-use colored::Colorize;
-use serde_json::Value;
-
-mod db;
-mod file_transfer;
-mod utils;
 
 const VERSION: &str = "0.4";
 const DEFAULT_API_URL: &str = "https://mvsep.com";
@@ -28,7 +25,12 @@ fn main() -> anyhow::Result<()> {
     utils::console::init();
 
     println!("{}", "╔═══════════════════════════════════════════╗".cyan());
-    println!("{}", format!("║       MVSep API Tester v{}         ║", VERSION).cyan().bold());
+    println!(
+        "{}",
+        format!("║       MVSep API Tester v{}         ║", VERSION)
+            .cyan()
+            .bold()
+    );
     println!("{}", "╚═══════════════════════════════════════════╝".cyan());
     println!();
 
@@ -40,7 +42,10 @@ fn main() -> anyhow::Result<()> {
 
     // Init default output formats if the table is empty
     {
-        let conn = db.conn.lock().map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
+        let conn = db
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
         let count = db::repositories::get_all_output_formats(&conn)
             .map(|f| f.len())
             .unwrap_or(0);
@@ -57,7 +62,10 @@ fn main() -> anyhow::Result<()> {
                 println!("{} Token verified", "✅".green());
             }
             Ok(false) => {
-                println!("{} Token invalid or expired, please login again", "⚠️".yellow());
+                println!(
+                    "{} Token invalid or expired, please login again",
+                    "⚠️".yellow()
+                );
             }
             Err(e) => {
                 println!("{} Token check failed: {}", "⚠️".yellow(), e);
@@ -107,7 +115,9 @@ fn load_app_config(db: &db::Database) -> App {
         token_valid: false,
         premium_enabled: u_int("premium_enabled", 0) != 0,
         long_filenames: u_int("long_filenames_enabled", 0) != 0,
-        api_url: remote.api_url.unwrap_or_else(|| DEFAULT_API_URL.to_string()),
+        api_url: remote
+            .api_url
+            .unwrap_or_else(|| DEFAULT_API_URL.to_string()),
         proxy_host: u_str("proxy_host", "127.0.0.1"),
         proxy_port: u_str("proxy_port", "7897").parse().unwrap_or(7897),
         proxy_mode: u_str("proxy_mode", "system"),
@@ -117,14 +127,14 @@ fn load_app_config(db: &db::Database) -> App {
 }
 
 fn build_http_client(app: &App) -> anyhow::Result<reqwest::blocking::Client> {
-    let mut builder = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(60));
+    let mut builder =
+        reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(60));
 
     match app.proxy_mode.as_str() {
         "manual" => {
             let proxy_url = format!("http://{}:{}", app.proxy_host, app.proxy_port);
-            let proxy =
-                reqwest::Proxy::all(&proxy_url).map_err(|e| anyhow::anyhow!("Proxy error: {}", e))?;
+            let proxy = reqwest::Proxy::all(&proxy_url)
+                .map_err(|e| anyhow::anyhow!("Proxy error: {}", e))?;
             builder = builder.proxy(proxy);
         }
         "none" => {
@@ -133,16 +143,36 @@ fn build_http_client(app: &App) -> anyhow::Result<reqwest::blocking::Client> {
         _ => {}
     }
 
-    builder.build().map_err(|e| anyhow::anyhow!("HTTP client error: {}", e))
+    builder
+        .build()
+        .map_err(|e| anyhow::anyhow!("HTTP client error: {}", e))
 }
 
 fn show_status(app: &App) {
-    println!("{}", "══════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "══════════════════════════════════════════════════".cyan()
+    );
     println!("  {} v{}", "MVSep API Tester".yellow().bold(), VERSION);
     if let Some(t) = &app.token {
-        let status = if app.token_valid { "Authenticated".green() } else { "Not verified".yellow() };
-        let premium = if app.premium_enabled { " ⭐Premium" } else { "" };
-        println!("  {} Token: {}..{} ({}){}", "🔑".cyan(), &t[..4].cyan(), "...".dimmed(), status, premium);
+        let status = if app.token_valid {
+            "Authenticated".green()
+        } else {
+            "Not verified".yellow()
+        };
+        let premium = if app.premium_enabled {
+            " ⭐Premium"
+        } else {
+            ""
+        };
+        println!(
+            "  {} Token: {}..{} ({}){}",
+            "🔑".cyan(),
+            &t[..4].cyan(),
+            "...".dimmed(),
+            status,
+            premium
+        );
     } else {
         println!("  {} {} Token", "🔑".red(), "No".red().bold());
     }
@@ -155,10 +185,17 @@ fn show_status(app: &App) {
         "none" => println!("  🌐 Proxy: {} (direct)", "None".yellow()),
         _ => println!("  🌐 Proxy: System (auto)"),
     }
-    println!("{}", "══════════════════════════════════════════════════".cyan());
+    println!(
+        "{}",
+        "══════════════════════════════════════════════════".cyan()
+    );
 }
 
-fn run_menu(app: &mut App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn run_menu(
+    app: &mut App,
+    db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     if app.token_valid {
         println!("  {} Logout", "[l]".yellow());
     } else {
@@ -167,7 +204,11 @@ fn run_menu(app: &mut App, db: &db::Database, tasks_db: &db::tasks_db::TasksData
     }
     println!("  {} Configure Proxy", "[p]".cyan());
     println!("  {} User Preferences", "[c]".cyan());
-    println!("  {} Create Task {} (need token)", "[3]".cyan().bold(), "⭐".yellow());
+    println!(
+        "  {} Create Task {} (need token)",
+        "[3]".cyan().bold(),
+        "⭐".yellow()
+    );
     println!("  {} List Tasks (from DB) ︎", "[t]".cyan());
     println!("  {} Operate Task (enter hash)", "[o]".cyan());
     println!("  {}", "──────────────".dimmed());
@@ -254,7 +295,8 @@ fn prompt(prompt_text: &str, default: Option<&str>) -> anyhow::Result<String> {
 
 fn prompt_int(prompt_text: &str, default: i32) -> anyhow::Result<i32> {
     let s = prompt(prompt_text, Some(&default.to_string()))?;
-    s.parse().map_err(|e| anyhow::anyhow!("Invalid number: {}", e))
+    s.parse()
+        .map_err(|e| anyhow::anyhow!("Invalid number: {}", e))
 }
 
 fn prompt_bool(prompt_text: &str, default: bool) -> anyhow::Result<bool> {
@@ -284,7 +326,9 @@ fn verify_token(app: &App) -> anyhow::Result<bool> {
 /// Present interactive choices for algorithm fields (add_opt1/2/3).
 /// Returns (opt1, opt2, opt3) — each is None when the field has no options
 /// or the user selects the default.
-fn prompt_algorithm_fields(fields: &[db::repositories::AlgorithmFieldRow]) -> (Option<i32>, Option<i32>, Option<i32>) {
+fn prompt_algorithm_fields(
+    fields: &[db::repositories::AlgorithmFieldRow],
+) -> (Option<i32>, Option<i32>, Option<i32>) {
     let mut opt1: Option<i32> = None;
     let mut opt2: Option<i32> = None;
     let mut opt3: Option<i32> = None;
@@ -311,7 +355,10 @@ fn prompt_algorithm_fields(fields: &[db::repositories::AlgorithmFieldRow]) -> (O
             .unwrap_or_default();
 
         if entries.is_empty() {
-            let raw = prompt_int(&format!("  {} (raw value, -1 to skip)", label), default_str.parse().unwrap_or(-1));
+            let raw = prompt_int(
+                &format!("  {} (raw value, -1 to skip)", label),
+                default_str.parse().unwrap_or(-1),
+            );
             if let Ok(v) = raw {
                 if v >= 0 {
                     match field_name {
@@ -329,10 +376,20 @@ fn prompt_algorithm_fields(fields: &[db::repositories::AlgorithmFieldRow]) -> (O
         println!("\n  {} — {}:", "🔧".cyan(), label.cyan());
         for (i, (key, desc)) in entries.iter().enumerate() {
             let marker = if *key == default_str { " (默认)" } else { "" };
-            println!("    {}. [{}] {}{}", i + 1, key.yellow(), desc, marker.dimmed());
+            println!(
+                "    {}. [{}] {}{}",
+                i + 1,
+                key.yellow(),
+                desc,
+                marker.dimmed()
+            );
         }
 
-        let chosen = prompt_int(&format!("  Select {} (1-{}, 0=default)", label, entries.len()), 0).unwrap_or(0);
+        let chosen = prompt_int(
+            &format!("  Select {} (1-{}, 0=default)", label, entries.len()),
+            0,
+        )
+        .unwrap_or(0);
         let idx = chosen as usize;
         let picked: Option<i32> = if chosen == 0 && !default_str.is_empty() {
             default_str.parse().ok()
@@ -343,7 +400,15 @@ fn prompt_algorithm_fields(fields: &[db::repositories::AlgorithmFieldRow]) -> (O
         };
 
         if let Some(val) = picked {
-            println!("    → Selected: {} = {}", val, entries.iter().find(|(k, _)| k == &val.to_string()).map(|(_, d)| d.as_str()).unwrap_or("?"));
+            println!(
+                "    → Selected: {} = {}",
+                val,
+                entries
+                    .iter()
+                    .find(|(k, _)| k == &val.to_string())
+                    .map(|(_, d)| d.as_str())
+                    .unwrap_or("?")
+            );
             match field_name {
                 "add_opt1" => opt1 = Some(val),
                 "add_opt2" => opt2 = Some(val),
@@ -419,42 +484,50 @@ fn check_cache_and_prompt_refresh(app: &mut App, db: &db::Database) -> anyhow::R
 /// This stores: algorithm_groups, algorithms, algorithm_fields (with options),
 /// and algorithm_output_formats associations.
 fn fetch_and_cache_algorithms(app: &App, db: &db::Database) -> anyhow::Result<usize> {
-    println!("  🌐 Fetching algorithm list from {}...", app.api_url.cyan());
+    println!(
+        "  🌐 Fetching algorithm list from {}...",
+        app.api_url.cyan()
+    );
 
     let client = build_http_client(app)?;
     let url = format!("{}/api/app/algorithms?scopes=single_upload", app.api_url);
 
-    let resp = client.get(&url).send().map_err(|e| {
-        anyhow::anyhow!("API request failed: {}", e)
-    })?;
+    let resp = client
+        .get(&url)
+        .send()
+        .map_err(|e| anyhow::anyhow!("API request failed: {}", e))?;
 
     if !resp.status().is_success() {
         anyhow::bail!("API returned HTTP {}", resp.status());
     }
 
-    let algorithms: Vec<serde_json::Value> = resp.json().map_err(|e| {
-        anyhow::anyhow!("Failed to parse API response: {}", e)
-    })?;
+    let algorithms: Vec<serde_json::Value> = resp
+        .json()
+        .map_err(|e| anyhow::anyhow!("Failed to parse API response: {}", e))?;
 
     let count = algorithms.len();
     println!("  ✅ Received {} algorithms from API", count);
 
-    let conn = db.conn.lock().map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
+    let conn = db
+        .conn
+        .lock()
+        .map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
 
     // Process each algorithm
     for algo in &algorithms {
-        let algo_id = algo.get("render_id")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0) as i32;
-        let algo_name = algo.get("name")
+        let algo_id = algo.get("render_id").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        let algo_name = algo
+            .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string();
-        let group_id = algo.get("algorithm_group")
+        let group_id = algo
+            .get("algorithm_group")
             .and_then(|g| g.get("id"))
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-        let group_name = algo.get("algorithm_group")
+        let group_name = algo
+            .get("algorithm_group")
             .and_then(|g| g.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("Ungrouped")
@@ -467,7 +540,10 @@ fn fetch_and_cache_algorithms(app: &App, db: &db::Database) -> anyhow::Result<us
         );
 
         // Read actual orientation from API
-        let orientation = algo.get("orientation").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        let orientation = algo
+            .get("orientation")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
 
         // Upsert algorithm
         let _ = conn.execute(
@@ -479,10 +555,26 @@ fn fetch_and_cache_algorithms(app: &App, db: &db::Database) -> anyhow::Result<us
         if let Some(fields) = algo.get("algorithm_fields").and_then(|f| f.as_array()) {
             for field in fields {
                 let field_id = field.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
-                let field_name = field.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let field_text = field.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                let field_options = field.get("options").and_then(|v| v.as_str()).unwrap_or("{}").to_string();
-                let field_default = field.get("default_key").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let field_name = field
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let field_text = field
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let field_options = field
+                    .get("options")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("{}")
+                    .to_string();
+                let field_default = field
+                    .get("default_key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
                 let _ = conn.execute(
                     "INSERT OR REPLACE INTO algorithm_fields (id, algorithm_id, name, text, options, default_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -510,7 +602,11 @@ fn fetch_and_cache_algorithms(app: &App, db: &db::Database) -> anyhow::Result<us
 /// Menu command: force-refresh algorithm cache from API.
 fn cmd_refresh_algorithms(app: &App, db: &db::Database) -> anyhow::Result<()> {
     match fetch_and_cache_algorithms(app, db) {
-        Ok(count) => println!("{} Algorithm cache refreshed ({} algorithms)", "✅".green(), count),
+        Ok(count) => println!(
+            "{} Algorithm cache refreshed ({} algorithms)",
+            "✅".green(),
+            count
+        ),
         Err(e) => println!("{} Refresh failed: {}", "❌".red(), e),
     }
     Ok(())
@@ -548,27 +644,46 @@ fn cmd_browse_algorithms(db: &db::Database) -> anyhow::Result<()> {
     }
 
     println!("\n{}", "═══ Algorithm List ═══".cyan().bold());
-    println!("  Total: {} algorithms in {} groups\n", algorithms.len().to_string().cyan(), groups.len().to_string().cyan());
+    println!(
+        "  Total: {} algorithms in {} groups\n",
+        algorithms.len().to_string().cyan(),
+        groups.len().to_string().cyan()
+    );
 
     for group in &groups {
-        let algos: Vec<_> = algorithms.iter().filter(|a| a.group_id == group.id).collect();
+        let algos: Vec<_> = algorithms
+            .iter()
+            .filter(|a| a.group_id == group.id)
+            .collect();
         if algos.is_empty() {
             continue;
         }
-        println!("{}", format!("  ▸ {} (ID: {})", group.name, group.id).yellow());
+        println!(
+            "{}",
+            format!("  ▸ {} (ID: {})", group.name, group.id).yellow()
+        );
         for algo in &algos {
             let badge = match algo.orientation {
                 0 => "  ".to_string(),
                 1 => " 🔸".yellow().to_string(),
                 _ => " 🔒 Premium".red().to_string(),
             };
-            println!("      ID {:>4}  {}{}", algo.id.to_string().cyan(), algo.name, badge);
+            println!(
+                "      ID {:>4}  {}{}",
+                algo.id.to_string().cyan(),
+                algo.name,
+                badge
+            );
         }
         println!();
     }
 
     println!("  {}", "──────────────".dimmed());
-    println!("  {} Save algorithm as preset          {} Back", "[s]".cyan(), "[b]".dimmed());
+    println!(
+        "  {} Save algorithm as preset          {} Back",
+        "[s]".cyan(),
+        "[b]".dimmed()
+    );
     loop {
         print!("> ");
         io::stdout().flush()?;
@@ -582,14 +697,19 @@ fn cmd_browse_algorithms(db: &db::Database) -> anyhow::Result<()> {
                     continue;
                 }
                 let name = prompt("Preset name", Some(&format!("algo_{}", algo_id)))?;
-                if name.is_empty() { continue; }
+                if name.is_empty() {
+                    continue;
+                }
                 let fmt = prompt_int("Default format (0-5)", 1)?;
                 let demo = prompt_bool("Default demo mode?", true)?;
                 let preset = PresetData {
                     name: name.clone(),
                     algorithm_id: algo_id,
-                    opt1: None, opt2: None, opt3: None,
-                    output_format: fmt, demo,
+                    opt1: None,
+                    opt2: None,
+                    opt3: None,
+                    output_format: fmt,
+                    demo,
                 };
                 if save_preset(&name, &preset) {
                     println!("✅ Preset '{}' saved", name.cyan());
@@ -607,18 +727,37 @@ fn cmd_browse_algorithms(db: &db::Database) -> anyhow::Result<()> {
 
 /// Menu command: display all available API endpoints categorized by type.
 fn cmd_api_reference() -> anyhow::Result<()> {
-    println!("\n{}", "╔══════════════════════════════════════════════════════╗".cyan());
-    println!("{}", "║              API Reference                          ║".cyan().bold());
-    println!("{}", "╚══════════════════════════════════════════════════════╝".cyan());
+    println!(
+        "\n{}",
+        "╔══════════════════════════════════════════════════════╗".cyan()
+    );
+    println!(
+        "{}",
+        "║              API Reference                          ║"
+            .cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════════════════╝".cyan()
+    );
 
     // ── Remote APIs ──
     println!("\n{}", "🌐 Remote APIs (MVSep Server)".green().bold());
 
-    println!("\n  {} {}", "── Account & Auth ──".yellow(), "(操作)".dimmed());
+    println!(
+        "\n  {} {}",
+        "── Account & Auth ──".yellow(),
+        "(操作)".dimmed()
+    );
     println!("    POST  /api/app/login");
     println!("    GET   /api/app/user");
 
-    println!("\n  {} {}", "── Separation Tasks ──".yellow(), "(操作)".dimmed());
+    println!(
+        "\n  {} {}",
+        "── Separation Tasks ──".yellow(),
+        "(操作)".dimmed()
+    );
     println!("    POST  /api/separation/create      Create separation task");
     println!("    GET   /api/separation/get           Query task status");
     println!("    POST  /api/separation/cancel        Cancel task");
@@ -631,21 +770,32 @@ fn cmd_api_reference() -> anyhow::Result<()> {
     println!("    GET   /api/app/algorithms           List + fields");
     println!("    GET   /api/output_formats           Output format list");
 
-    println!("\n  {} {}", "── Settings Toggles ──".yellow(), "(操作)".dimmed());
+    println!(
+        "\n  {} {}",
+        "── Settings Toggles ──".yellow(),
+        "(操作)".dimmed()
+    );
     println!("    POST  /api/app/enable_premium          Enable premium mode");
     println!("    POST  /api/app/disable_premium         Disable premium mode");
     println!("    POST  /api/app/enable_long_filenames   Enable long filenames");
     println!("    POST  /api/app/disable_long_filenames  Disable long filenames");
 
     // ── Database APIs ──
-    println!("\n{}", "────────────────────────────────────────────────────".dimmed());
+    println!(
+        "\n{}",
+        "────────────────────────────────────────────────────".dimmed()
+    );
     println!("{}", "🗄️  Database APIs (Local SQLite)".green().bold());
 
     println!("\n  {} {}", "── Config ──".yellow(), "(操作)".dimmed());
     println!("    save_config / get_config            User config (token, proxy, etc.)");
     println!("    UserConfigDB (kv store)              Cache metadata (last_fetched, etc.)");
 
-    println!("\n  {} {}", "── Algorithm Cache ──".yellow(), "(查询 + 操作)".dimmed());
+    println!(
+        "\n  {} {}",
+        "── Algorithm Cache ──".yellow(),
+        "(查询 + 操作)".dimmed()
+    );
     println!("    algorithm_groups                    Groups (id, name)");
     println!("    algorithms                          Algorithms (id, name, group)");
     println!("    algorithm_fields                    Fields with options per algorithm");
@@ -659,15 +809,31 @@ fn cmd_api_reference() -> anyhow::Result<()> {
     println!("\n  {} {}", "── Presets ──".yellow(), "(操作)".dimmed());
     println!("    presets                             Saved presets (algo + options)");
 
-    println!("\n{}", "╔══════════════════════════════════════════════════════╗".cyan());
-    println!("{}", "║  [b] Browse Algo DB    [r] Refresh from API          ║".cyan());
-    println!("{}", "║  [a] Run All Tests      [3] Create Task              ║".cyan());
-    println!("{}", "╚══════════════════════════════════════════════════════╝".cyan());
+    println!(
+        "\n{}",
+        "╔══════════════════════════════════════════════════════╗".cyan()
+    );
+    println!(
+        "{}",
+        "║  [b] Browse Algo DB    [r] Refresh from API          ║".cyan()
+    );
+    println!(
+        "{}",
+        "║  [a] Run All Tests      [3] Create Task              ║".cyan()
+    );
+    println!(
+        "{}",
+        "╚══════════════════════════════════════════════════════╝".cyan()
+    );
     Ok(())
 }
 
 /// Menu command: list tracked tasks from DB with interactive selection.
-fn cmd_list_tasks(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn cmd_list_tasks(
+    app: &App,
+    db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     let mut tasks = load_tasks_from_db(tasks_db)?;
     if tasks.is_empty() {
         println!("  ℹ️ No tasks in database.");
@@ -675,8 +841,14 @@ fn cmd_list_tasks(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDa
     }
 
     // Auto-poll any non-terminal tasks to refresh status
-    let pending_hashes: Vec<String> = tasks.iter()
-        .filter(|t| !matches!(t.status.as_str(), "done" | "expired" | "failed" | "cancelled"))
+    let pending_hashes: Vec<String> = tasks
+        .iter()
+        .filter(|t| {
+            !matches!(
+                t.status.as_str(),
+                "done" | "expired" | "failed" | "cancelled"
+            )
+        })
         .map(|t| t.hash.clone())
         .collect();
     if !pending_hashes.is_empty() {
@@ -719,7 +891,9 @@ fn cmd_list_tasks(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDa
     Ok(())
 }
 
-fn load_tasks_from_db(tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<Vec<db::repositories::TaskRow>> {
+fn load_tasks_from_db(
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<Vec<db::repositories::TaskRow>> {
     let conn = match tasks_db.conn.lock() {
         Ok(c) => c,
         Err(_) => return Ok(vec![]),
@@ -755,7 +929,8 @@ fn print_tasks(tasks: &[db::repositories::TaskRow]) {
         } else {
             task.hash.clone()
         };
-        println!("  {}. {} {} {} {}",
+        println!(
+            "  {}. {} {} {} {}",
             (i + 1).to_string().cyan(),
             status_icon,
             phase_tag.dimmed(),
@@ -766,11 +941,23 @@ fn print_tasks(tasks: &[db::repositories::TaskRow]) {
     println!("{}", "─────────────────────────".dimmed());
 }
 
-fn task_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, task: &db::repositories::TaskRow) -> anyhow::Result<()> {
+fn task_detail_menu(
+    app: &App,
+    db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+    task: &db::repositories::TaskRow,
+) -> anyhow::Result<()> {
     loop {
         // Reload task from DB every iteration to pick up poll/cancel changes
-        let current = tasks_db.conn.lock().ok()
-            .and_then(|conn| db::repositories::get_task_by_hash(&conn, &task.hash).ok().flatten())
+        let current = tasks_db
+            .conn
+            .lock()
+            .ok()
+            .and_then(|conn| {
+                db::repositories::get_task_by_hash(&conn, &task.hash)
+                    .ok()
+                    .flatten()
+            })
             .unwrap_or_else(|| task.clone());
 
         let status_label = match current.status.as_str() {
@@ -783,11 +970,22 @@ fn task_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Tasks
             "uploaded" => "📤 已上传".dimmed(),
             _ => current.status.dimmed(),
         };
-        let is_terminal = matches!(current.status.as_str(), "done" | "expired" | "failed" | "cancelled");
+        let is_terminal = matches!(
+            current.status.as_str(),
+            "done" | "expired" | "failed" | "cancelled"
+        );
 
-        println!("\n{} {} {}", "── Task".cyan(), current.hash.cyan(), "──".cyan());
+        println!(
+            "\n{} {} {}",
+            "── Task".cyan(),
+            current.hash.cyan(),
+            "──".cyan()
+        );
         println!("  File:     {}", current.file_name);
-        println!("  Algo:     {} (ID: {})", current.algorithm_name, current.algorithm_id);
+        println!(
+            "  Algo:     {} (ID: {})",
+            current.algorithm_name, current.algorithm_id
+        );
         println!("  Format:   {}", current.format);
         println!("  Status:   {} ({:.0}%)", status_label, current.progress);
         if current.status == "done" {
@@ -815,7 +1013,11 @@ fn task_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Tasks
 }
 
 /// Operate on a task by manually entering its hash.
-fn cmd_operate_hash(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn cmd_operate_hash(
+    app: &App,
+    db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     let hash = prompt("Task hash", None)?;
     if hash.is_empty() {
         println!("⚠️ No hash entered");
@@ -829,8 +1031,11 @@ fn cmd_operate_hash(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Tasks
     println!();
 
     // Try to find task in local DB first for better display
-    let task_from_db = tasks_db.conn.lock().ok()
-        .and_then(|conn| db::repositories::get_task_by_hash(&conn, &hash).ok().flatten());
+    let task_from_db = tasks_db.conn.lock().ok().and_then(|conn| {
+        db::repositories::get_task_by_hash(&conn, &hash)
+            .ok()
+            .flatten()
+    });
 
     if let Some(task) = task_from_db {
         task_detail_menu(app, db, tasks_db, &task)?;
@@ -841,7 +1046,12 @@ fn cmd_operate_hash(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Tasks
 }
 
 /// Detail sub-menu for a manual hash (not in DB).
-fn hash_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
+fn hash_detail_menu(
+    app: &App,
+    db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+    hash: &str,
+) -> anyhow::Result<()> {
     println!("\n{} {} {}", "── Task".cyan(), hash.cyan(), "──".cyan());
     println!("  (not in local database)");
     loop {
@@ -865,7 +1075,12 @@ fn hash_detail_menu(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Tasks
     Ok(())
 }
 
-fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
+fn cmd_poll_task(
+    app: &App,
+    _db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+    hash: &str,
+) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -883,23 +1098,55 @@ fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDat
     };
 
     let url = format!("{}/api/separation/get", app.api_url);
-    match client.get(&url).query(&[("hash", hash), ("api_token", &token)]).send() {
+    match client
+        .get(&url)
+        .query(&[("hash", hash), ("api_token", &token)])
+        .send()
+    {
         Ok(resp) => {
             if !resp.status().is_success() {
                 println!("❌ Poll failed (HTTP {})", resp.status());
                 return Ok(());
             }
             let body: Value = resp.json().unwrap_or(Value::Null);
-            let raw_status = body.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-            let queue_order = body.get("data").and_then(|d| d.get("current_order")).and_then(|v| v.as_i64()).unwrap_or(0);
-            let queue_total = body.get("data").and_then(|d| d.get("queue_count")).and_then(|v| v.as_i64());
-            let finished = body.get("data").and_then(|d| d.get("finished_chunks")).and_then(|v| v.as_i64()).unwrap_or(0);
-            let total = body.get("data").and_then(|d| d.get("all_chunks")).and_then(|v| v.as_i64()).unwrap_or(0);
-            let progress = if total > 0 { finished as f64 / total as f64 } else { 0.0 };
+            let raw_status = body
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let queue_order = body
+                .get("data")
+                .and_then(|d| d.get("current_order"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let queue_total = body
+                .get("data")
+                .and_then(|d| d.get("queue_count"))
+                .and_then(|v| v.as_i64());
+            let finished = body
+                .get("data")
+                .and_then(|d| d.get("finished_chunks"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let total = body
+                .get("data")
+                .and_then(|d| d.get("all_chunks"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let progress = if total > 0 {
+                finished as f64 / total as f64
+            } else {
+                0.0
+            };
 
             // Refine status: if "processing" but still in queue → "queued"
             // If "done" but no files → files expired
-            let has_files = body.get("data").and_then(|d| d.get("files")).and_then(|v| v.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
+            let has_files = body
+                .get("data")
+                .and_then(|d| d.get("files"))
+                .and_then(|v| v.as_array())
+                .map(|a| !a.is_empty())
+                .unwrap_or(false);
             let refined_status = if raw_status == "processing" && queue_order > 0 {
                 "queued".to_string()
             } else if raw_status == "done" && !has_files {
@@ -916,25 +1163,44 @@ fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDat
                 );
                 // Save output_files when task is done with files
                 if raw_status == "done" && has_files {
-                    if let Some(files_arr) = body.get("data").and_then(|d| d.get("files")).and_then(|v| v.as_array()) {
-                        let file_list: Vec<serde_json::Value> = files_arr.iter().map(|f| {
-                            let url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                            let name = f.get("name").and_then(|v| v.as_str()).or_else(|| url.split('/').next_back()).unwrap_or("");
-                            let size = f.get("size").and_then(|v| v.as_str()).and_then(|s| parse_size_mb(s)).unwrap_or(0);
-                            serde_json::json!({
-                                "remote_name": name,
-                                "url": url,
-                                "size": size,
-                                "downloaded": false,
+                    if let Some(files_arr) = body
+                        .get("data")
+                        .and_then(|d| d.get("files"))
+                        .and_then(|v| v.as_array())
+                    {
+                        let file_list: Vec<serde_json::Value> = files_arr
+                            .iter()
+                            .map(|f| {
+                                let url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                                let name = f
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .or_else(|| url.split('/').next_back())
+                                    .unwrap_or("");
+                                let size = f
+                                    .get("size")
+                                    .and_then(|v| v.as_str())
+                                    .and_then(parse_size_mb)
+                                    .unwrap_or(0);
+                                serde_json::json!({
+                                    "remote_name": name,
+                                    "url": url,
+                                    "size": size,
+                                    "downloaded": false,
+                                })
                             })
-                        }).collect();
-                        let json_str = serde_json::to_string(&file_list).unwrap_or_else(|_| "[]".to_string());
+                            .collect();
+                        let json_str =
+                            serde_json::to_string(&file_list).unwrap_or_else(|_| "[]".to_string());
                         let _ = db::repositories::update_task_output_files(&conn, hash, &json_str);
                     }
                 }
             }
 
-            let msg = body.get("data").and_then(|d| d.get("message")).and_then(|v| v.as_str())
+            let msg = body
+                .get("data")
+                .and_then(|d| d.get("message"))
+                .and_then(|v| v.as_str())
                 .or_else(|| body.get("message").and_then(|v| v.as_str()))
                 .unwrap_or("");
 
@@ -957,12 +1223,23 @@ fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDat
                 }
             }
             if total > 0 {
-                println!("  📈 Progress: {:.1}% ({}/{})", progress * 100.0, finished, total);
+                println!(
+                    "  📈 Progress: {:.1}% ({}/{})",
+                    progress * 100.0,
+                    finished,
+                    total
+                );
             }
             if raw_status == "done" && has_files {
-                println!("  {} Separation complete! Use [d] to download.", "✅".green());
+                println!(
+                    "  {} Separation complete! Use [d] to download.",
+                    "✅".green()
+                );
             } else if raw_status == "done" && !has_files {
-                println!("  {} Task files have expired (no longer available).", "⌛".red());
+                println!(
+                    "  {} Task files have expired (no longer available).",
+                    "⌛".red()
+                );
             } else if raw_status == "failed" {
                 println!("  {} Task failed.", "❌".red());
             }
@@ -972,7 +1249,12 @@ fn cmd_poll_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDat
     Ok(())
 }
 
-fn cmd_cancel_single(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase, hash: &str) -> anyhow::Result<()> {
+fn cmd_cancel_single(
+    app: &App,
+    _db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+    hash: &str,
+) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -1013,7 +1295,11 @@ fn cmd_cancel_single(app: &App, db: &db::Database, tasks_db: &db::tasks_db::Task
     Ok(())
 }
 
-fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn cmd_download_task(
+    app: &App,
+    hash: &str,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     let token = match &app.token {
         Some(t) => t.clone(),
         None => {
@@ -1031,9 +1317,10 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
     };
 
     // Get output directory
-    let mut output_dir = PathBuf::from(
-        prompt("Output directory (Enter to keep)", Some(&app.output_dir.to_string_lossy()))?,
-    );
+    let mut output_dir = PathBuf::from(prompt(
+        "Output directory (Enter to keep)",
+        Some(&app.output_dir.to_string_lossy()),
+    )?);
     if output_dir.as_os_str().is_empty() {
         output_dir = app.output_dir.clone();
     }
@@ -1048,7 +1335,9 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
 
     // Load saved output_files from tasks DB if available, or query API
     let saved_files = tasks_db.conn.lock().ok().and_then(|conn| {
-        db::repositories::get_task_output_files(&conn, hash).ok().flatten()
+        db::repositories::get_task_output_files(&conn, hash)
+            .ok()
+            .flatten()
     });
 
     let file_items: Vec<serde_json::Value> = if let Some(json_str) = saved_files {
@@ -1057,7 +1346,11 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
     } else {
         // Query API for file list
         let url = format!("{}/api/separation/get", app.api_url);
-        let resp = match client.get(&url).query(&[("hash", hash), ("api_token", &token)]).send() {
+        let resp = match client
+            .get(&url)
+            .query(&[("hash", hash), ("api_token", &token)])
+            .send()
+        {
             Ok(r) => r,
             Err(e) => {
                 println!("❌ Query failed: {}", e);
@@ -1071,29 +1364,42 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
                 return Ok(());
             }
         };
-        body.get("data").and_then(|d| d.get("files"))
+        body.get("data")
+            .and_then(|d| d.get("files"))
             .and_then(|v| v.as_array())
             .map(|arr| {
-                arr.iter().map(|f| {
-                    let url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                    let name = f.get("name").and_then(|v| v.as_str())
-                        .or_else(|| url.split('/').next_back())
-                        .unwrap_or("output.wav");
-                    let size = f.get("size").and_then(|v| v.as_str()).and_then(|s| parse_size_mb(s)).unwrap_or(0);
-                    serde_json::json!({
-                        "remote_name": name,
-                        "url": url,
-                        "size": size,
-                        "downloaded": false,
+                arr.iter()
+                    .map(|f| {
+                        let url = f.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                        let name = f
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| url.split('/').next_back())
+                            .unwrap_or("output.wav");
+                        let size = f
+                            .get("size")
+                            .and_then(|v| v.as_str())
+                            .and_then(parse_size_mb)
+                            .unwrap_or(0);
+                        serde_json::json!({
+                            "remote_name": name,
+                            "url": url,
+                            "size": size,
+                            "downloaded": false,
+                        })
                     })
-                }).collect()
+                    .collect()
             })
             .unwrap_or_default()
     };
 
-    let pending: Vec<&serde_json::Value> = file_items.iter()
+    let pending: Vec<&serde_json::Value> = file_items
+        .iter()
         .filter(|f| {
-            let marked_done = f.get("downloaded").and_then(|v| v.as_bool()).unwrap_or(false);
+            let marked_done = f
+                .get("downloaded")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             if !marked_done {
                 return true; // never downloaded
             }
@@ -1117,17 +1423,32 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
         return Ok(());
     }
 
-    println!("  📥 {} file(s) to download ({} already done)", pending.len(), completed_count);
+    println!(
+        "  📥 {} file(s) to download ({} already done)",
+        pending.len(),
+        completed_count
+    );
 
     // Find original filename from task DB for proper naming
-    let original_name = tasks_db.conn.lock().ok().and_then(|conn| {
-        db::repositories::get_task_by_hash(&conn, hash).ok().flatten()
-    }).map(|t| t.file_name).unwrap_or_else(|| "output".to_string());
+    let original_name = tasks_db
+        .conn
+        .lock()
+        .ok()
+        .and_then(|conn| {
+            db::repositories::get_task_by_hash(&conn, hash)
+                .ok()
+                .flatten()
+        })
+        .map(|t| t.file_name)
+        .unwrap_or_else(|| "output".to_string());
 
     // Download each pending file with streaming + resume
-    for (i, file_info) in pending.iter().enumerate() {
+    for file_info in pending.iter() {
         let file_url = file_info.get("url").and_then(|v| v.as_str()).unwrap_or("");
-        let remote_name = file_info.get("remote_name").and_then(|v| v.as_str()).unwrap_or("output.wav");
+        let remote_name = file_info
+            .get("remote_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("output.wav");
         let local_name = file_transfer::build_local_name(&original_name, remote_name);
         let dest_path = output_dir.join(&local_name);
 
@@ -1135,7 +1456,11 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
         let resume_from = file_transfer::get_resume_info(&dest_path, file_url);
 
         if resume_from > 0 {
-            println!("  🔄 Resuming {} ({:.1} MB already downloaded)", local_name.cyan(), resume_from as f64 / 1024.0 / 1024.0);
+            println!(
+                "  🔄 Resuming {} ({:.1} MB already downloaded)",
+                local_name.cyan(),
+                resume_from as f64 / 1024.0 / 1024.0
+            );
         } else if dest_path.exists() {
             println!("  ✅ {} already exists, skipping", local_name.cyan());
             continue;
@@ -1151,26 +1476,39 @@ fn cmd_download_task(app: &App, hash: &str, tasks_db: &db::tasks_db::TasksDataba
             let speed_mbps = avg_speed / 1024.0 / 1024.0;
             let total_mb = p.total_bytes.unwrap_or(0) as f64 / 1024.0 / 1024.0;
             let done_mb = p.bytes as f64 / 1024.0 / 1024.0;
-            print!("\r  ⬇️ {} ▸ {:.1}% ({:.1}/{:.1} MB @ {:.1} MB/s)   ",
-                dl_name.cyan(), p.percent, done_mb, total_mb, speed_mbps);
+            print!(
+                "\r  ⬇️ {} ▸ {:.1}% ({:.1}/{:.1} MB @ {:.1} MB/s)   ",
+                dl_name.cyan(),
+                p.percent,
+                done_mb,
+                total_mb,
+                speed_mbps
+            );
             let _ = io::stdout().flush();
         }) {
             Ok(()) => {
                 println!("\r  ✅ {} downloaded successfully    ", local_name.cyan());
                 // Update output_files JSON
                 if let Ok(conn) = tasks_db.conn.lock() {
-                    if let Ok(Some(json_str)) = db::repositories::get_task_output_files(&conn, hash) {
-                        if let Ok(mut list) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
+                    if let Ok(Some(json_str)) = db::repositories::get_task_output_files(&conn, hash)
+                    {
+                        if let Ok(mut list) =
+                            serde_json::from_str::<Vec<serde_json::Value>>(&json_str)
+                        {
                             for item in list.iter_mut() {
                                 let u = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
                                 if u == file_url {
                                     item["downloaded"] = serde_json::Value::Bool(true);
-                                    item["local_path"] = serde_json::Value::String(dest_path.to_string_lossy().to_string());
+                                    item["local_path"] = serde_json::Value::String(
+                                        dest_path.to_string_lossy().to_string(),
+                                    );
                                     break;
                                 }
                             }
                             if let Ok(updated) = serde_json::to_string(&list) {
-                                let _ = db::repositories::update_task_output_files(&conn, hash, &updated);
+                                let _ = db::repositories::update_task_output_files(
+                                    &conn, hash, &updated,
+                                );
                             }
                         }
                     }
@@ -1215,7 +1553,11 @@ fn cmd_login(app: &mut App, db: &db::Database) -> anyhow::Result<()> {
                     app.token = Some(tok.clone());
                     save_token_to_db(db, &tok);
                     app.token_valid = verify_token(app).unwrap_or(false);
-                    println!("✅ Login success! Token saved ({}..{})", &tok[..4], &tok[tok.len() - 4..]);
+                    println!(
+                        "✅ Login success! Token saved ({}..{})",
+                        &tok[..4],
+                        &tok[tok.len() - 4..]
+                    );
                 } else {
                     println!("⚠️ Login success but no token in response.");
                 }
@@ -1266,10 +1608,7 @@ fn cmd_proxy_config(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
     println!("\n{}", "--- Proxy Configuration ---".yellow());
 
     let current_mode = app.proxy_mode.clone();
-    let mode = prompt(
-        "Proxy mode (system / manual / none)",
-        Some(&current_mode),
-    )?;
+    let mode = prompt("Proxy mode (system / manual / none)", Some(&current_mode))?;
     let mode = mode.to_lowercase();
     if mode != "system" && mode != "manual" && mode != "none" {
         println!("{} Invalid mode. Use system, manual, or none.", "❌".red());
@@ -1423,12 +1762,33 @@ fn cmd_delete_preset() -> anyhow::Result<()> {
 fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
     loop {
         println!("\n{}", "── User Preferences ──".yellow());
-        println!("  {} Output Directory:  {}", "[1]".cyan(), app.output_dir.to_string_lossy().cyan());
-        println!("  {} Default Format:    {} (ID: {})", "[2]".cyan(), format_name(app.output_format), app.output_format);
-        println!("  {} API URL:           {}", "[3]".cyan(), app.api_url.cyan());
-        let premium_status = if app.premium_enabled { "✅ On" } else { "❌ Off" };
-        let fn_status = if app.long_filenames { "✅ On" } else { "❌ Off" };
-        println!("  {} Auto-Refresh Days: {} days", "[4]".cyan(), "15");
+        println!(
+            "  {} Output Directory:  {}",
+            "[1]".cyan(),
+            app.output_dir.to_string_lossy().cyan()
+        );
+        println!(
+            "  {} Default Format:    {} (ID: {})",
+            "[2]".cyan(),
+            format_name(app.output_format),
+            app.output_format
+        );
+        println!(
+            "  {} API URL:           {}",
+            "[3]".cyan(),
+            app.api_url.cyan()
+        );
+        let premium_status = if app.premium_enabled {
+            "✅ On"
+        } else {
+            "❌ Off"
+        };
+        let fn_status = if app.long_filenames {
+            "✅ On"
+        } else {
+            "❌ Off"
+        };
+        println!("  {} Auto-Refresh Days: 15 days", "[4]".cyan());
         println!("  {} Premium Mode:      {}", "[5]".cyan(), premium_status);
         println!("  {} Long Filenames:    {}", "[6]".cyan(), fn_status);
         println!("  {}", "──────────────".dimmed());
@@ -1442,7 +1802,10 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
         io::stdin().read_line(&mut input)?;
         match input.trim() {
             "1" => {
-                let val = prompt("Output directory (Enter to keep)", Some(&app.output_dir.to_string_lossy()))?;
+                let val = prompt(
+                    "Output directory (Enter to keep)",
+                    Some(&app.output_dir.to_string_lossy()),
+                )?;
                 app.output_dir = PathBuf::from(val);
                 save_pref_str("output_dir", &app.output_dir.to_string_lossy());
                 println!("✅ Output directory saved");
@@ -1472,7 +1835,10 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
                     let db_path = utils::paths::db_path();
                     if let Ok(db) = db::Database::new(Some(&db_path.to_string_lossy())) {
                         if let Ok(conn) = db.conn.lock() {
-                            let config = db::repositories::get_config(&conn).ok().flatten().unwrap_or_default();
+                            let config = db::repositories::get_config(&conn)
+                                .ok()
+                                .flatten()
+                                .unwrap_or_default();
                             let updated = db::repositories::ConfigRow {
                                 api_url: Some(app.api_url.clone()),
                                 ..config
@@ -1484,7 +1850,8 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
                 }
             }
             "4" => {
-                let current = open_user_config().ok()
+                let current = open_user_config()
+                    .ok()
                     .and_then(|c| c.get_int("algorithm_auto_refresh_days").ok().flatten())
                     .unwrap_or(15);
                 let val = prompt_int("Auto-refresh days (1-90)", current as i32)?;
@@ -1497,18 +1864,29 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
             }
             "5" => {
                 let on = prompt_bool("Enable premium mode?", app.premium_enabled)?;
-                let endpoint = if on { "enable_premium" } else { "disable_premium" };
-                toggle_endpoint(app, endpoint, "Premium");
+                let endpoint = if on {
+                    "enable_premium"
+                } else {
+                    "disable_premium"
+                };
+                let _ = toggle_endpoint(app, endpoint, "Premium");
                 // The toggle_endpoint function already calls the API; update local state
-                if on { app.premium_enabled = true; } else { app.premium_enabled = false; }
+                app.premium_enabled = on;
                 save_pref_int("premium_enabled", if app.premium_enabled { 1 } else { 0 });
             }
             "6" => {
                 let on = prompt_bool("Enable long filenames?", app.long_filenames)?;
-                let endpoint = if on { "enable_long_filenames" } else { "disable_long_filenames" };
-                toggle_endpoint(app, endpoint, "Long Filenames");
-                if on { app.long_filenames = true; } else { app.long_filenames = false; }
-                save_pref_int("long_filenames_enabled", if app.long_filenames { 1 } else { 0 });
+                let endpoint = if on {
+                    "enable_long_filenames"
+                } else {
+                    "disable_long_filenames"
+                };
+                let _ = toggle_endpoint(app, endpoint, "Long Filenames");
+                app.long_filenames = on;
+                save_pref_int(
+                    "long_filenames_enabled",
+                    if app.long_filenames { 1 } else { 0 },
+                );
             }
             "s" | "S" => cmd_save_preset(app)?,
             "d" | "D" => cmd_delete_preset()?,
@@ -1522,8 +1900,14 @@ fn cmd_user_prefs(app: &mut App, _db: &db::Database) -> anyhow::Result<()> {
 /// Parse a size string like "74.29 MB" into bytes.
 fn parse_size_mb(s: &str) -> Option<u64> {
     let s = s.trim();
-    if let Some(val) = s.strip_suffix("MB").or_else(|| s.strip_suffix("Mb")).map(|v| v.trim()) {
-        val.parse::<f64>().ok().map(|mb| (mb * 1024.0 * 1024.0) as u64)
+    if let Some(val) = s
+        .strip_suffix("MB")
+        .or_else(|| s.strip_suffix("Mb"))
+        .map(|v| v.trim())
+    {
+        val.parse::<f64>()
+            .ok()
+            .map(|mb| (mb * 1024.0 * 1024.0) as u64)
     } else if let Some(val) = s.strip_suffix("KB").or_else(|| s.strip_suffix("Kb")) {
         val.parse::<f64>().ok().map(|kb| (kb * 1024.0) as u64)
     } else {
@@ -1543,7 +1927,11 @@ fn format_name(id: i32) -> &'static str {
     }
 }
 
-fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn cmd_create_task(
+    app: &App,
+    _db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     let token = require_token(app)?;
 
     let audio_file = match find_audio_file() {
@@ -1564,8 +1952,14 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
 
     // Check for presets first
     let presets = list_presets();
-    let (mut sep_type, mut output_format, mut is_demo, mut preset_opt1, mut preset_opt2, mut preset_opt3) =
-        (26i32, 1i32, true, None::<i32>, None::<i32>, None::<i32>);
+    let (
+        mut sep_type,
+        mut output_format,
+        mut is_demo,
+        mut preset_opt1,
+        mut preset_opt2,
+        mut preset_opt3,
+    ) = (26i32, 1i32, true, None::<i32>, None::<i32>, None::<i32>);
 
     // Allow loading from preset via 'l' key at the sep_type prompt
     if !presets.is_empty() {
@@ -1584,10 +1978,21 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
                 preset_opt1 = p.opt1;
                 preset_opt2 = p.opt2;
                 preset_opt3 = p.opt3;
-                println!("  ✅ Loaded preset: {} (Algo {}, Format {})", p.name.cyan(), p.algorithm_id, p.output_format);
-                if let Some(o) = p.opt1 { println!("     add_opt1: {}", o); }
-                if let Some(o) = p.opt2 { println!("     add_opt2: {}", o); }
-                if let Some(o) = p.opt3 { println!("     add_opt3: {}", o); }
+                println!(
+                    "  ✅ Loaded preset: {} (Algo {}, Format {})",
+                    p.name.cyan(),
+                    p.algorithm_id,
+                    p.output_format
+                );
+                if let Some(o) = p.opt1 {
+                    println!("     add_opt1: {}", o);
+                }
+                if let Some(o) = p.opt2 {
+                    println!("     add_opt2: {}", o);
+                }
+                if let Some(o) = p.opt3 {
+                    println!("     add_opt3: {}", o);
+                }
             }
         } else if let Ok(id) = input.parse::<i32>() {
             sep_type = id;
@@ -1595,43 +2000,67 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
     } else {
         sep_type = prompt_int("Sep Type ID", sep_type)?;
     }
-    output_format = prompt_int("Output Format (0=MP3,1=WAV16,2=FLAC16,3=M4A,4=WAV32,5=FLAC24)", output_format)?;
+    output_format = prompt_int(
+        "Output Format (0=MP3,1=WAV16,2=FLAC16,3=M4A,4=WAV32,5=FLAC24)",
+        output_format,
+    )?;
     is_demo = prompt_bool("Demo Mode? (y=free demo, n=real, costs credits)", is_demo)?;
 
     // Try to load algorithm fields from DB
     let db_path = utils::paths::db_path();
     let fields = match db::Database::new(Some(&db_path.to_string_lossy())) {
-        Ok(db) => db.with_conn(|conn| db::repositories::get_algorithm_fields(conn, sep_type)).ok().unwrap_or_default(),
+        Ok(db) => db
+            .with_conn(|conn| db::repositories::get_algorithm_fields(conn, sep_type))
+            .ok()
+            .unwrap_or_default(),
         Err(_) => Vec::new(),
     };
 
-    let (opt1, opt2, opt3) = if preset_opt1.is_some() || preset_opt2.is_some() || preset_opt3.is_some() {
-        // Options already loaded from preset
-        (preset_opt1, preset_opt2, preset_opt3)
-    } else if fields.is_empty() {
-        // No fields cached — suggest refresh
-        println!("  ℹ️ Algorithm details not cached (use [r] to refresh from API).");
-        println!("     Enter -1 to skip any option.");
-        let o1 = prompt_int("  add_opt1", -1)?;
-        let o2 = prompt_int("  add_opt2", -1)?;
-        let o3 = prompt_int("  add_opt3", -1)?;
-        (
-            if o1 >= 0 { Some(o1) } else { None },
-            if o2 >= 0 { Some(o2) } else { None },
-            if o3 >= 0 { Some(o3) } else { None },
-        )
-    } else {
-        prompt_algorithm_fields(&fields)
-    };
+    let (opt1, opt2, opt3) =
+        if preset_opt1.is_some() || preset_opt2.is_some() || preset_opt3.is_some() {
+            // Options already loaded from preset
+            (preset_opt1, preset_opt2, preset_opt3)
+        } else if fields.is_empty() {
+            // No fields cached — suggest refresh
+            println!("  ℹ️ Algorithm details not cached (use [r] to refresh from API).");
+            println!("     Enter -1 to skip any option.");
+            let o1 = prompt_int("  add_opt1", -1)?;
+            let o2 = prompt_int("  add_opt2", -1)?;
+            let o3 = prompt_int("  add_opt3", -1)?;
+            (
+                if o1 >= 0 { Some(o1) } else { None },
+                if o2 >= 0 { Some(o2) } else { None },
+                if o3 >= 0 { Some(o3) } else { None },
+            )
+        } else {
+            prompt_algorithm_fields(&fields)
+        };
 
     println!("\n{}", "--- Create Separation Task ---".yellow());
-    println!("  📤 File: {:?} ({:.2} MB)", file_name, file_size as f64 / 1024.0 / 1024.0);
+    println!(
+        "  📤 File: {:?} ({:.2} MB)",
+        file_name,
+        file_size as f64 / 1024.0 / 1024.0
+    );
     println!("  📊 Algorithm ID: {}", sep_type);
-    if let Some(v) = opt1 { println!("  🔧 add_opt1: {}", v); }
-    if let Some(v) = opt2 { println!("  🔧 add_opt2: {}", v); }
-    if let Some(v) = opt3 { println!("  🔧 add_opt3: {}", v); }
+    if let Some(v) = opt1 {
+        println!("  🔧 add_opt1: {}", v);
+    }
+    if let Some(v) = opt2 {
+        println!("  🔧 add_opt2: {}", v);
+    }
+    if let Some(v) = opt3 {
+        println!("  🔧 add_opt3: {}", v);
+    }
     println!("  💾 Output Format ID: {}", output_format);
-    println!("  💰 Demo Mode: {}", if is_demo { "Yes (free)".green() } else { "No (costs credits)".yellow() });
+    println!(
+        "  💰 Demo Mode: {}",
+        if is_demo {
+            "Yes (free)".green()
+        } else {
+            "No (costs credits)".yellow()
+        }
+    );
     println!("  🌐 Via: {}:{}", app.proxy_host, app.proxy_port);
     println!("  {}", "──────────────".dimmed());
     // Allow saving as preset before uploading
@@ -1645,7 +2074,9 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
             let preset = PresetData {
                 name: name.clone(),
                 algorithm_id: sep_type,
-                opt1, opt2, opt3,
+                opt1,
+                opt2,
+                opt3,
                 output_format,
                 demo: is_demo,
             };
@@ -1657,27 +2088,43 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
         }
     }
 
-    let client = build_http_client(app)?;
+    let _client = build_http_client(app)?;
     let url = format!("{}/api/separation/create", app.api_url);
 
     let mut fields: Vec<(String, String)> = vec![
         ("api_token".into(), token.to_string()),
         ("sep_type".into(), sep_type.to_string()),
         ("output_format".into(), output_format.to_string()),
-        ("is_demo".into(), if is_demo { "1".into() } else { "0".into() }),
+        (
+            "is_demo".into(),
+            if is_demo { "1".into() } else { "0".into() },
+        ),
     ];
-    if let Some(v) = opt1 { fields.push(("add_opt1".into(), v.to_string())); }
-    if let Some(v) = opt2 { fields.push(("add_opt2".into(), v.to_string())); }
-    if let Some(v) = opt3 { fields.push(("add_opt3".into(), v.to_string())); }
+    if let Some(v) = opt1 {
+        fields.push(("add_opt1".into(), v.to_string()));
+    }
+    if let Some(v) = opt2 {
+        fields.push(("add_opt2".into(), v.to_string()));
+    }
+    if let Some(v) = opt3 {
+        fields.push(("add_opt3".into(), v.to_string()));
+    }
 
     let upload_start = Instant::now();
     let upload_hash = file_transfer::upload_file(
-        &app.proxy_host, app.proxy_port, &app.proxy_mode,
-        &url, &audio_file, fields,
+        &app.proxy_host,
+        app.proxy_port,
+        &app.proxy_mode,
+        &url,
+        &audio_file,
+        fields,
         move |p| {
             let total_mb = p.total_bytes.unwrap_or(0) as f64 / 1048576.0;
             let done_mb = p.bytes as f64 / 1048576.0;
-            print!("\r  🔄 {:.0}% ({:.1}/{:.1} MB)", p.percent, done_mb, total_mb);
+            print!(
+                "\r  🔄 {:.0}% ({:.1}/{:.1} MB)",
+                p.percent, done_mb, total_mb
+            );
             let _ = io::stdout().flush();
         },
     );
@@ -1730,7 +2177,11 @@ fn cmd_create_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksD
     Ok(())
 }
 
-fn cmd_cancel_task(app: &App, db: &db::Database, tasks_db: &db::tasks_db::TasksDatabase) -> anyhow::Result<()> {
+fn cmd_cancel_task(
+    app: &App,
+    _db: &db::Database,
+    tasks_db: &db::tasks_db::TasksDatabase,
+) -> anyhow::Result<()> {
     let token = require_token(app)?;
     let hash = prompt("Task hash to cancel", None)?;
     if hash.is_empty() {
@@ -1784,7 +2235,11 @@ fn cmd_query_task(app: &App) -> anyhow::Result<()> {
 
     let t = Instant::now();
     let token_str = token.to_string();
-    match client.get(&url).query(&[("hash", hash.as_str()), ("api_token", token_str.as_str())]).send() {
+    match client
+        .get(&url)
+        .query(&[("hash", hash.as_str()), ("api_token", token_str.as_str())])
+        .send()
+    {
         Ok(resp) => {
             let elapsed = t.elapsed();
             let status = resp.status();
@@ -1796,24 +2251,59 @@ fn cmd_query_task(app: &App) -> anyhow::Result<()> {
             }
 
             let body: Value = resp.json().unwrap_or(Value::Null);
-            let task_status = body.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
-            let message = body.get("data").and_then(|d| d.get("message")).and_then(|v| v.as_str())
+            let task_status = body
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let message = body
+                .get("data")
+                .and_then(|d| d.get("message"))
+                .and_then(|v| v.as_str())
                 .or_else(|| body.get("message").and_then(|v| v.as_str()))
                 .unwrap_or("");
 
-            let finished = body.get("data").and_then(|d| d.get("finished_chunks")).and_then(|v| v.as_i64()).unwrap_or(0);
-            let total = body.get("data").and_then(|d| d.get("all_chunks")).and_then(|v| v.as_i64()).unwrap_or(0);
-            let progress = if total > 0 { finished as f64 / total as f64 * 100.0 } else { 0.0 };
+            let finished = body
+                .get("data")
+                .and_then(|d| d.get("finished_chunks"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let total = body
+                .get("data")
+                .and_then(|d| d.get("all_chunks"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+            let progress = if total > 0 {
+                finished as f64 / total as f64 * 100.0
+            } else {
+                0.0
+            };
 
-            let queue_count = body.get("data").and_then(|d| d.get("queue_count")).and_then(|v| v.as_i64());
-            let current_order = body.get("data").and_then(|d| d.get("current_order")).and_then(|v| v.as_i64());
+            let queue_count = body
+                .get("data")
+                .and_then(|d| d.get("queue_count"))
+                .and_then(|v| v.as_i64());
+            let current_order = body
+                .get("data")
+                .and_then(|d| d.get("current_order"))
+                .and_then(|v| v.as_i64());
 
-            let files = body.get("data").and_then(|d| d.get("files")).and_then(|v| v.as_array())
+            let files = body
+                .get("data")
+                .and_then(|d| d.get("files"))
+                .and_then(|v| v.as_array())
                 .map(|arr| {
-                    arr.iter().filter_map(|f| {
-                        f.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())
-                            .or_else(|| f.get("url").and_then(|u| u.as_str()).and_then(|u| u.split('/').next_back().map(|s| s.to_string())))
-                    }).collect::<Vec<_>>()
+                    arr.iter()
+                        .filter_map(|f| {
+                            f.get("name")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string())
+                                .or_else(|| {
+                                    f.get("url").and_then(|u| u.as_str()).and_then(|u| {
+                                        u.split('/').next_back().map(|s| s.to_string())
+                                    })
+                                })
+                        })
+                        .collect::<Vec<_>>()
                 });
 
             println!("\n{}", "── Task Status ──".yellow());
@@ -1841,7 +2331,11 @@ fn cmd_query_task(app: &App) -> anyhow::Result<()> {
             if let Some(ref d) = db {
                 if let Ok(conn) = d.conn.lock() {
                     let _ = db::repositories::update_task_status(
-                        &conn, &hash, task_status, progress / 100.0, None,
+                        &conn,
+                        &hash,
+                        task_status,
+                        progress / 100.0,
+                        None,
                     );
                 }
             }
@@ -1881,11 +2375,22 @@ fn cmd_user_info(app: &App) -> anyhow::Result<()> {
                 let name = data.get("name").and_then(|v| v.as_str()).unwrap_or("?");
                 let email = data.get("email").and_then(|v| v.as_str()).unwrap_or("?");
                 let plan = data.get("plan").and_then(|v| v.as_str()).unwrap_or("free");
-                let premium = data.get("premium_minutes").and_then(|v| v.as_i64()).unwrap_or(0);
+                let premium = data
+                    .get("premium_minutes")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
 
                 // Cache premium/filename state from API
-                let premium_on = data.get("premium_enabled").and_then(|v| v.as_i64()).unwrap_or(0) != 0;
-                let fn_on = data.get("long_filenames_enabled").and_then(|v| v.as_i64()).unwrap_or(0) != 0;
+                let premium_on = data
+                    .get("premium_enabled")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0)
+                    != 0;
+                let fn_on = data
+                    .get("long_filenames_enabled")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0)
+                    != 0;
                 save_pref_int("premium_enabled", if premium_on { 1 } else { 0 });
                 save_pref_int("long_filenames_enabled", if fn_on { 1 } else { 0 });
 
@@ -1917,7 +2422,10 @@ fn cmd_run_all_tests(app: &App, db: &db::Database) -> anyhow::Result<()> {
         match client.get(&url).query(&[("api_token", token)]).send() {
             Ok(resp) if resp.status().is_success() => {
                 let body: Value = resp.json().unwrap_or(Value::Null);
-                let active = body.pointer("/queue/in_process").and_then(|v| v.as_u64()).unwrap_or(0);
+                let active = body
+                    .pointer("/queue/in_process")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 let queued = body.get("queue").and_then(|v| v.as_u64()).unwrap_or(0);
                 println!("  ✅ Queue: {} active, {} queued", active, queued);
             }
@@ -1952,14 +2460,26 @@ fn cmd_run_all_tests(app: &App, db: &db::Database) -> anyhow::Result<()> {
     // Test 3: Output formats from DB
     println!("\n{}", "--- [3/5] Output Formats (DB) ---".yellow());
     {
-        let conn = db.conn.lock().map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
+        let conn = db
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("DB lock: {}", e))?;
         match db::repositories::get_all_output_formats(&conn) {
             Ok(formats) => {
                 println!("  ✅ {} formats in DB:", formats.len());
                 for f in &formats {
-                    let bits = f.bits_per_sample.map(|b| format!("{} bit", b)).unwrap_or_else(|| "lossy".to_string());
+                    let bits = f
+                        .bits_per_sample
+                        .map(|b| format!("{} bit", b))
+                        .unwrap_or_else(|| "lossy".to_string());
                     let premium = if f.is_premium { " 🔒 Premium" } else { "" };
-                    println!("     ID {}: {} ({}){}", f.id, f.name.cyan(), bits, premium.red());
+                    println!(
+                        "     ID {}: {} ({}){}",
+                        f.id,
+                        f.name.cyan(),
+                        bits,
+                        premium.red()
+                    );
                 }
             }
             Err(e) => println!("  ❌ DB error: {}", e),

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MVSEP Review"
+  short_description: "Review mvsep-rs rewrite batch quality gates"
+  default_prompt: "Use $mvsep-rs-review-gate to review a completed mvsep-rs rewrite batch."

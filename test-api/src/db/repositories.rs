@@ -1,7 +1,7 @@
-use rusqlite::{Connection, params};
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
 use colored::Colorize;
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmGroupRow {
@@ -139,7 +139,9 @@ pub struct LogEntryRow {
 
 pub fn upsert_algorithm_group(conn: &Connection, group: &AlgorithmGroupRow) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO algorithm_groups (id, name) VALUES (?1, ?2)",
+        "INSERT INTO algorithm_groups (id, name)
+         VALUES (?1, ?2)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name",
         params![group.id, group.name],
     )?;
     Ok(())
@@ -147,22 +149,95 @@ pub fn upsert_algorithm_group(conn: &Connection, group: &AlgorithmGroupRow) -> R
 
 pub fn upsert_algorithm(conn: &Connection, algo: &AlgorithmRow) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO algorithms (id, name, group_id, price_coefficient, orientation) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![algo.id, algo.name, algo.group_id, algo.price_coefficient, algo.orientation],
+        "INSERT INTO algorithms (id, name, group_id, price_coefficient, orientation, is_cached)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           group_id = excluded.group_id,
+           price_coefficient = excluded.price_coefficient,
+           orientation = excluded.orientation,
+           is_cached = 1",
+        params![
+            algo.id,
+            algo.name,
+            algo.group_id,
+            algo.price_coefficient,
+            algo.orientation
+        ],
     )?;
     Ok(())
 }
 
 pub fn upsert_algorithm_field(conn: &Connection, field: &AlgorithmFieldRow) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO algorithm_fields (id, algorithm_id, name, text, options, default_key) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![field.id, field.algorithm_id, field.name, field.text, field.options, field.default_key],
+        "INSERT INTO algorithm_fields (id, algorithm_id, name, text, options, default_key)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(id) DO UPDATE SET
+           algorithm_id = excluded.algorithm_id,
+           name = excluded.name,
+           text = excluded.text,
+           options = excluded.options,
+           default_key = excluded.default_key",
+        params![
+            field.id,
+            field.algorithm_id,
+            field.name,
+            field.text,
+            field.options,
+            field.default_key
+        ],
     )?;
     Ok(())
 }
 
+pub fn replace_algorithm_cache(
+    conn: &mut Connection,
+    groups: &[AlgorithmGroupRow],
+    algorithms: &[AlgorithmRow],
+    fields: &[AlgorithmFieldRow],
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("UPDATE algorithms SET is_cached = 0", [])?;
+    tx.execute("DELETE FROM algorithm_output_formats", [])?;
+    tx.execute("DELETE FROM algorithm_fields", [])?;
+
+    for group in groups {
+        upsert_algorithm_group(&tx, group)?;
+    }
+    for algo in algorithms {
+        upsert_algorithm(&tx, algo)?;
+    }
+    for field in fields {
+        upsert_algorithm_field(&tx, field)?;
+    }
+
+    if get_all_output_formats(&tx)?.is_empty() {
+        init_default_output_formats(&tx)?;
+    }
+    init_default_algorithm_format_associations(&tx)?;
+    tx.execute(
+        "DELETE FROM algorithms
+         WHERE is_cached = 0
+           AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.algorithm_id = algorithms.id)
+           AND NOT EXISTS (SELECT 1 FROM presets WHERE presets.algorithm_id = algorithms.id)",
+        [],
+    )?;
+    tx.execute(
+        "DELETE FROM algorithm_groups
+         WHERE NOT EXISTS (SELECT 1 FROM algorithms WHERE algorithms.group_id = algorithm_groups.id)",
+        [],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn get_all_algorithms(conn: &Connection) -> Result<Vec<AlgorithmRow>> {
-    let mut stmt = conn.prepare("SELECT id, name, group_id, price_coefficient, orientation FROM algorithms ORDER BY group_id, id")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, group_id, price_coefficient, orientation
+         FROM algorithms
+         WHERE is_cached = 1
+         ORDER BY group_id, id",
+    )?;
     let rows = stmt.query_map([], |row| {
         Ok(AlgorithmRow {
             id: row.get(0)?,
@@ -176,7 +251,11 @@ pub fn get_all_algorithms(conn: &Connection) -> Result<Vec<AlgorithmRow>> {
 }
 
 pub fn get_algorithm_by_id(conn: &Connection, id: i32) -> Result<Option<AlgorithmRow>> {
-    let mut stmt = conn.prepare("SELECT id, name, group_id, price_coefficient, orientation FROM algorithms WHERE id = ?1")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, group_id, price_coefficient, orientation
+         FROM algorithms
+         WHERE id = ?1 AND is_cached = 1",
+    )?;
     let mut rows = stmt.query_map(params![id], |row| {
         Ok(AlgorithmRow {
             id: row.get(0)?,
@@ -192,7 +271,10 @@ pub fn get_algorithm_by_id(conn: &Connection, id: i32) -> Result<Option<Algorith
     }
 }
 
-pub fn get_algorithm_fields(conn: &Connection, algorithm_id: i32) -> Result<Vec<AlgorithmFieldRow>> {
+pub fn get_algorithm_fields(
+    conn: &Connection,
+    algorithm_id: i32,
+) -> Result<Vec<AlgorithmFieldRow>> {
     let mut stmt = conn.prepare(
         "SELECT id, algorithm_id, name, text, options, default_key FROM algorithm_fields WHERE algorithm_id = ?1 ORDER BY id"
     )?;
@@ -209,7 +291,10 @@ pub fn get_algorithm_fields(conn: &Connection, algorithm_id: i32) -> Result<Vec<
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
 }
 
-pub fn get_algorithm_details_with_fields(conn: &Connection, algorithm_id: i32) -> Result<Option<(AlgorithmRow, Vec<AlgorithmFieldRow>)>> {
+pub fn get_algorithm_details_with_fields(
+    conn: &Connection,
+    algorithm_id: i32,
+) -> Result<Option<(AlgorithmRow, Vec<AlgorithmFieldRow>)>> {
     let algo = get_algorithm_by_id(conn, algorithm_id)?;
     match algo {
         Some(a) => {
@@ -232,7 +317,11 @@ pub fn get_all_algorithm_groups(conn: &Connection) -> Result<Vec<AlgorithmGroupR
 }
 
 pub fn count_algorithms(conn: &Connection) -> Result<i64> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM algorithms", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM algorithms WHERE is_cached = 1",
+        [],
+        |row| row.get(0),
+    )?;
     Ok(count)
 }
 
@@ -298,7 +387,13 @@ pub fn get_all_tasks(conn: &Connection) -> Result<Vec<TaskRow>> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
 }
 
-pub fn update_task_status(conn: &Connection, hash: &str, status: &str, progress: f64, error: Option<&str>) -> Result<()> {
+pub fn update_task_status(
+    conn: &Connection,
+    hash: &str,
+    status: &str,
+    progress: f64,
+    error: Option<&str>,
+) -> Result<()> {
     conn.execute(
         "UPDATE tasks SET status = ?1, progress = ?2, error = ?3 WHERE hash = ?4",
         params![status, progress, error, hash],
@@ -307,7 +402,11 @@ pub fn update_task_status(conn: &Connection, hash: &str, status: &str, progress:
 }
 
 /// Update the output_files JSON for a task (stores remote file info).
-pub fn update_task_output_files(conn: &Connection, hash: &str, output_files_json: &str) -> Result<()> {
+pub fn update_task_output_files(
+    conn: &Connection,
+    hash: &str,
+    output_files_json: &str,
+) -> Result<()> {
     conn.execute(
         "UPDATE tasks SET output_files = ?1 WHERE hash = ?2",
         params![output_files_json, hash],
@@ -382,7 +481,11 @@ pub fn get_all_task_history(conn: &Connection) -> Result<Vec<TaskHistoryRow>> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
 }
 
-pub fn get_paginated_task_history(conn: &Connection, page: i64, page_size: i64) -> Result<(Vec<TaskHistoryRow>, i64)> {
+pub fn get_paginated_task_history(
+    conn: &Connection,
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<TaskHistoryRow>, i64)> {
     let total: i64 = conn.query_row("SELECT COUNT(*) FROM task_history", [], |row| row.get(0))?;
 
     let offset = page * page_size;
@@ -409,7 +512,7 @@ pub fn trim_task_history(conn: &Connection, max_records: i64) -> Result<u64> {
     if count > max_records {
         let to_delete = count - max_records;
         let affected = conn.execute(
-            "DELETE FROM task_history WHERE id IN (SELECT id FROM task_history ORDER BY completed_at ASC, created_at ASC LIMIT ?1)",
+            "DELETE FROM task_history WHERE id IN (SELECT id FROM task_history ORDER BY COALESCE(completed_at, created_at) ASC, created_at ASC LIMIT ?1)",
             params![to_delete],
         )?;
         return Ok(affected as u64);
@@ -485,7 +588,9 @@ pub fn upsert_preset(conn: &Connection, preset: &PresetRow) -> Result<()> {
 }
 
 pub fn get_all_presets(conn: &Connection) -> Result<Vec<PresetRow>> {
-    let mut stmt = conn.prepare("SELECT id, name, algorithm_id, opt1, opt2, opt3, format_id, demo FROM presets ORDER BY id")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, algorithm_id, opt1, opt2, opt3, format_id, demo FROM presets ORDER BY id",
+    )?;
     let rows = stmt.query_map([], |row| {
         Ok(PresetRow {
             id: row.get(0)?,
@@ -508,14 +613,28 @@ pub fn delete_preset(conn: &Connection, id: &str) -> Result<bool> {
 
 pub fn upsert_output_format(conn: &Connection, fmt: &OutputFormatRow) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO output_formats (id, name, bits_per_sample, extension, is_premium) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![fmt.id, fmt.name, fmt.bits_per_sample, fmt.extension, fmt.is_premium as i32],
+        "INSERT INTO output_formats (id, name, bits_per_sample, extension, is_premium)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           bits_per_sample = excluded.bits_per_sample,
+           extension = excluded.extension,
+           is_premium = excluded.is_premium",
+        params![
+            fmt.id,
+            fmt.name,
+            fmt.bits_per_sample,
+            fmt.extension,
+            fmt.is_premium as i32
+        ],
     )?;
     Ok(())
 }
 
 pub fn get_all_output_formats(conn: &Connection) -> Result<Vec<OutputFormatRow>> {
-    let mut stmt = conn.prepare("SELECT id, name, bits_per_sample, extension, is_premium FROM output_formats ORDER BY id")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, name, bits_per_sample, extension, is_premium FROM output_formats ORDER BY id",
+    )?;
     let rows = stmt.query_map([], |row| {
         Ok(OutputFormatRow {
             id: row.get(0)?,
@@ -530,12 +649,48 @@ pub fn get_all_output_formats(conn: &Connection) -> Result<Vec<OutputFormatRow>>
 
 pub fn init_default_output_formats(conn: &Connection) -> Result<usize> {
     let defaults = vec![
-        OutputFormatRow { id: 0, name: "MP3 (320 kbps)".into(), bits_per_sample: None, extension: "mp3".into(), is_premium: false },
-        OutputFormatRow { id: 1, name: "WAV (16 bit)".into(), bits_per_sample: Some(16), extension: "wav".into(), is_premium: false },
-        OutputFormatRow { id: 2, name: "FLAC (16 bit)".into(), bits_per_sample: Some(16), extension: "flac".into(), is_premium: false },
-        OutputFormatRow { id: 3, name: "M4A (lossy)".into(), bits_per_sample: None, extension: "m4a".into(), is_premium: false },
-        OutputFormatRow { id: 4, name: "WAV (32 bit)".into(), bits_per_sample: Some(32), extension: "wav".into(), is_premium: true },
-        OutputFormatRow { id: 5, name: "FLAC (24 bit)".into(), bits_per_sample: Some(24), extension: "flac".into(), is_premium: true },
+        OutputFormatRow {
+            id: 0,
+            name: "MP3 (320 kbps)".into(),
+            bits_per_sample: None,
+            extension: "mp3".into(),
+            is_premium: false,
+        },
+        OutputFormatRow {
+            id: 1,
+            name: "WAV (16 bit)".into(),
+            bits_per_sample: Some(16),
+            extension: "wav".into(),
+            is_premium: false,
+        },
+        OutputFormatRow {
+            id: 2,
+            name: "FLAC (16 bit)".into(),
+            bits_per_sample: Some(16),
+            extension: "flac".into(),
+            is_premium: false,
+        },
+        OutputFormatRow {
+            id: 3,
+            name: "M4A (lossy)".into(),
+            bits_per_sample: None,
+            extension: "m4a".into(),
+            is_premium: false,
+        },
+        OutputFormatRow {
+            id: 4,
+            name: "WAV (32 bit)".into(),
+            bits_per_sample: Some(32),
+            extension: "wav".into(),
+            is_premium: true,
+        },
+        OutputFormatRow {
+            id: 5,
+            name: "FLAC (24 bit)".into(),
+            bits_per_sample: Some(24),
+            extension: "flac".into(),
+            is_premium: true,
+        },
     ];
     let mut count = 0;
     for fmt in &defaults {
@@ -547,7 +702,11 @@ pub fn init_default_output_formats(conn: &Connection) -> Result<usize> {
 }
 
 /// 设置算法支持的输出格式列表（先清除旧关联，再写入新关联）
-pub fn set_algorithm_output_formats(conn: &Connection, algorithm_id: i32, format_ids: &[i32]) -> Result<()> {
+pub fn set_algorithm_output_formats(
+    conn: &Connection,
+    algorithm_id: i32,
+    format_ids: &[i32],
+) -> Result<()> {
     remove_algorithm_output_formats(conn, algorithm_id)?;
     for &fid in format_ids {
         conn.execute(
@@ -559,13 +718,16 @@ pub fn set_algorithm_output_formats(conn: &Connection, algorithm_id: i32, format
 }
 
 /// 获取某个算法支持的所有输出格式
-pub fn get_formats_for_algorithm(conn: &Connection, algorithm_id: i32) -> Result<Vec<OutputFormatRow>> {
+pub fn get_formats_for_algorithm(
+    conn: &Connection,
+    algorithm_id: i32,
+) -> Result<Vec<OutputFormatRow>> {
     let mut stmt = conn.prepare(
         "SELECT f.id, f.name, f.bits_per_sample, f.extension, f.is_premium
          FROM output_formats f
          INNER JOIN algorithm_output_formats aof ON aof.format_id = f.id
          WHERE aof.algorithm_id = ?1
-         ORDER BY f.id"
+         ORDER BY f.id",
     )?;
     let rows = stmt.query_map(params![algorithm_id], |row| {
         Ok(OutputFormatRow {
@@ -595,7 +757,8 @@ pub fn get_all_algorithm_format_associations(conn: &Connection) -> Result<Vec<Al
 pub fn init_default_algorithm_format_associations(conn: &Connection) -> Result<usize> {
     let count = conn.execute(
         "INSERT OR IGNORE INTO algorithm_output_formats (algorithm_id, format_id)
-         SELECT a.id, f.id FROM algorithms a CROSS JOIN output_formats f",
+         SELECT a.id, f.id FROM algorithms a CROSS JOIN output_formats f
+         WHERE a.is_cached = 1",
         [],
     )?;
     Ok(count)
@@ -610,7 +773,13 @@ pub fn remove_algorithm_output_formats(conn: &Connection, algorithm_id: i32) -> 
     Ok(())
 }
 
-pub fn insert_log_entry(conn: &Connection, timestamp: &str, level: &str, message: &str, source: &str) -> Result<i64> {
+pub fn insert_log_entry(
+    conn: &Connection,
+    timestamp: &str,
+    level: &str,
+    message: &str,
+    source: &str,
+) -> Result<i64> {
     conn.execute(
         "INSERT INTO log_entries (timestamp, level, message, source) VALUES (?1, ?2, ?3, ?4)",
         params![timestamp, level, message, source],
@@ -620,7 +789,7 @@ pub fn insert_log_entry(conn: &Connection, timestamp: &str, level: &str, message
 
 pub fn get_recent_logs(conn: &Connection, limit: i64) -> Result<Vec<LogEntryRow>> {
     let mut stmt = conn.prepare(
-        "SELECT id, timestamp, level, message, source FROM log_entries ORDER BY id DESC LIMIT ?1"
+        "SELECT id, timestamp, level, message, source FROM log_entries ORDER BY id DESC LIMIT ?1",
     )?;
     let rows = stmt.query_map(params![limit], |row| {
         Ok(LogEntryRow {
@@ -661,8 +830,16 @@ pub fn print_table_stats(conn: &Connection) -> Result<()> {
     ];
 
     for (table, label) in &tables {
-        let count: i64 = conn.query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| row.get(0)).unwrap_or(0);
-        println!("  {:.<30} {}", format!("{}:", label), count.to_string().green());
+        let count: i64 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {}", table), [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0);
+        println!(
+            "  {:.<30} {}",
+            format!("{}:", label),
+            count.to_string().green()
+        );
     }
 
     println!("{}", "═".repeat(50).cyan());

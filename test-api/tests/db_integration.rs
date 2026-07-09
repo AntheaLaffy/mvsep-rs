@@ -33,20 +33,49 @@ fn test_migration_creates_tables() {
             .filter_map(|r| r.ok())
             .collect();
 
-        assert!(tables.contains(&"output_formats".to_string()), "output_formats table missing");
-        assert!(tables.contains(&"algorithm_output_formats".to_string()), "algorithm_output_formats table missing");
-        assert!(tables.contains(&"algorithms".to_string()), "algorithms table missing");
-        assert!(tables.contains(&"algorithm_fields".to_string()), "algorithm_fields table missing");
-        assert!(tables.contains(&"algorithm_groups".to_string()), "algorithm_groups table missing");
-        assert!(tables.contains(&"config".to_string()), "config table missing");
+        assert!(
+            tables.contains(&"output_formats".to_string()),
+            "output_formats table missing"
+        );
+        assert!(
+            tables.contains(&"algorithm_output_formats".to_string()),
+            "algorithm_output_formats table missing"
+        );
+        assert!(
+            tables.contains(&"algorithms".to_string()),
+            "algorithms table missing"
+        );
+        assert!(
+            tables.contains(&"algorithm_fields".to_string()),
+            "algorithm_fields table missing"
+        );
+        assert!(
+            tables.contains(&"algorithm_groups".to_string()),
+            "algorithm_groups table missing"
+        );
+        assert!(
+            tables.contains(&"config".to_string()),
+            "config table missing"
+        );
         assert!(tables.contains(&"tasks".to_string()), "tasks table missing");
-        assert!(tables.contains(&"task_history".to_string()), "task_history table missing");
-        assert!(tables.contains(&"presets".to_string()), "presets table missing");
-        assert!(tables.contains(&"log_entries".to_string()), "log_entries table missing");
+        assert!(
+            tables.contains(&"task_history".to_string()),
+            "task_history table missing"
+        );
+        assert!(
+            tables.contains(&"presets".to_string()),
+            "presets table missing"
+        );
+        assert!(
+            tables.contains(&"log_entries".to_string()),
+            "log_entries table missing"
+        );
 
         // Verify schema version
-        let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 2, "Expected schema v2");
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 3, "Expected schema v3");
         Ok(())
     })
     .expect("DB query failed");
@@ -171,6 +200,40 @@ fn test_upsert_output_format() {
     .expect("DB query failed");
 }
 
+#[test]
+fn test_upsert_output_format_preserves_algorithm_associations() {
+    let (_dir, db) = temp_db();
+
+    db.with_conn(|conn| {
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (1, 'Test Algo', 1)",
+            [],
+        )?;
+        mvsep_api_tester::db::repositories::init_default_output_formats(conn)?;
+        mvsep_api_tester::db::repositories::set_algorithm_output_formats(conn, 1, &[1])?;
+
+        let updated = mvsep_api_tester::db::repositories::OutputFormatRow {
+            id: 1,
+            name: "WAV (16 bit updated)".into(),
+            bits_per_sample: Some(16),
+            extension: "wav".into(),
+            is_premium: false,
+        };
+        mvsep_api_tester::db::repositories::upsert_output_format(conn, &updated)?;
+
+        let formats = mvsep_api_tester::db::repositories::get_formats_for_algorithm(conn, 1)?;
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].id, 1);
+        assert_eq!(formats[0].name, "WAV (16 bit updated)");
+        Ok(())
+    })
+    .expect("DB query failed");
+}
+
 // ── Algorithm-Format Association Tests ──
 
 #[test]
@@ -179,9 +242,18 @@ fn test_algorithm_output_formats() {
 
     // Insert test data
     db.with_conn(|conn| {
-        conn.execute("INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (1, 'Test Algo 1', 1)", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (2, 'Test Algo 2', 1)", [])?;
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (1, 'Test Algo 1', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (2, 'Test Algo 2', 1)",
+            [],
+        )?;
         mvsep_api_tester::db::repositories::init_default_output_formats(conn)?;
         Ok(())
     })
@@ -223,9 +295,18 @@ fn test_init_default_algorithm_format_associations() {
 
     // Insert test data
     db.with_conn(|conn| {
-        conn.execute("INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (10, 'Algo A', 1)", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (20, 'Algo B', 1)", [])?;
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (10, 'Algo A', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (20, 'Algo B', 1)",
+            [],
+        )?;
         mvsep_api_tester::db::repositories::init_default_output_formats(conn)?;
         Ok(())
     })
@@ -233,10 +314,15 @@ fn test_init_default_algorithm_format_associations() {
 
     // Init default associations (all algorithms × all formats)
     db.with_conn(|conn| {
-        let count = mvsep_api_tester::db::repositories::init_default_algorithm_format_associations(conn)
-            .expect("init_default_algorithm_format_associations failed");
+        let count =
+            mvsep_api_tester::db::repositories::init_default_algorithm_format_associations(conn)
+                .expect("init_default_algorithm_format_associations failed");
         // 2 algorithms × 6 formats = 12 associations
-        assert!(count >= 12, "Expected at least 12 associations, got {}", count);
+        assert!(
+            count >= 12,
+            "Expected at least 12 associations, got {}",
+            count
+        );
         Ok(())
     })
     .expect("Init associations failed");
@@ -265,8 +351,14 @@ fn test_remove_algorithm_output_formats() {
     let (_dir, db) = temp_db();
 
     db.with_conn(|conn| {
-        conn.execute("INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (99, 'Algo', 1)", [])?;
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (99, 'Algo', 1)",
+            [],
+        )?;
         mvsep_api_tester::db::repositories::init_default_output_formats(conn)?;
         Ok(())
     })
@@ -296,9 +388,18 @@ fn test_get_all_algorithm_format_associations() {
     let (_dir, db) = temp_db();
 
     db.with_conn(|conn| {
-        conn.execute("INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (1, 'A', 1)", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (2, 'B', 1)", [])?;
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (1, 'A', 1)",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (2, 'B', 1)",
+            [],
+        )?;
         mvsep_api_tester::db::repositories::init_default_output_formats(conn)?;
         Ok(())
     })
@@ -314,10 +415,169 @@ fn test_get_all_algorithm_format_associations() {
     db.with_conn(|conn| {
         let all = mvsep_api_tester::db::repositories::get_all_algorithm_format_associations(conn)
             .expect("get_all_algorithm_format_associations failed");
-        assert_eq!(all.len(), 4, "Expected 4 associations (2 algos × 2 formats each)");
+        assert_eq!(
+            all.len(),
+            4,
+            "Expected 4 associations (2 algos × 2 formats each)"
+        );
         Ok(())
     })
     .expect("Query failed");
+}
+
+#[test]
+fn test_replace_algorithm_cache_rebuilds_rows_and_default_formats() {
+    let (_dir, db) = temp_db();
+
+    let mut conn = db.conn.lock().expect("DB lock failed");
+    mvsep_api_tester::db::repositories::replace_algorithm_cache(
+        &mut conn,
+        &[mvsep_api_tester::db::repositories::AlgorithmGroupRow {
+            id: 7,
+            name: "Vocals".into(),
+        }],
+        &[mvsep_api_tester::db::repositories::AlgorithmRow {
+            id: 26,
+            name: "Old Name".into(),
+            group_id: 7,
+            price_coefficient: 1.5,
+            orientation: 0,
+        }],
+        &[mvsep_api_tester::db::repositories::AlgorithmFieldRow {
+            id: 2601,
+            algorithm_id: 26,
+            name: "add_opt1".into(),
+            text: Some("Model".into()),
+            options: Some(r#"{"0":"Default"}"#.into()),
+            default_key: Some("0".into()),
+        }],
+    )
+    .expect("first replace_algorithm_cache failed");
+
+    let (algo, fields) =
+        mvsep_api_tester::db::repositories::get_algorithm_details_with_fields(&conn, 26)
+            .expect("details query failed")
+            .expect("algorithm 26 missing");
+    assert_eq!(algo.name, "Old Name");
+    assert_eq!(fields.len(), 1);
+    let formats = mvsep_api_tester::db::repositories::get_formats_for_algorithm(&conn, 26)
+        .expect("formats query failed");
+    assert_eq!(formats.len(), 6);
+
+    mvsep_api_tester::db::repositories::replace_algorithm_cache(
+        &mut conn,
+        &[mvsep_api_tester::db::repositories::AlgorithmGroupRow {
+            id: 8,
+            name: "Drums".into(),
+        }],
+        &[mvsep_api_tester::db::repositories::AlgorithmRow {
+            id: 99,
+            name: "New Algo".into(),
+            group_id: 8,
+            price_coefficient: 1.0,
+            orientation: 1,
+        }],
+        &[],
+    )
+    .expect("second replace_algorithm_cache failed");
+
+    assert!(
+        mvsep_api_tester::db::repositories::get_algorithm_by_id(&conn, 26)
+            .expect("stale query failed")
+            .is_none(),
+        "stale algorithm should be removed during cache replacement"
+    );
+    assert_eq!(
+        mvsep_api_tester::db::repositories::count_algorithms(&conn)
+            .expect("count_algorithms failed"),
+        1
+    );
+    let formats = mvsep_api_tester::db::repositories::get_formats_for_algorithm(&conn, 99)
+        .expect("new formats query failed");
+    assert_eq!(formats.len(), 6);
+}
+
+#[test]
+fn test_replace_algorithm_cache_preserves_referenced_stale_algorithms() {
+    let (_dir, db) = temp_db();
+
+    let mut conn = db.conn.lock().expect("DB lock failed");
+    mvsep_api_tester::db::repositories::replace_algorithm_cache(
+        &mut conn,
+        &[mvsep_api_tester::db::repositories::AlgorithmGroupRow {
+            id: 1,
+            name: "Old Group".into(),
+        }],
+        &[mvsep_api_tester::db::repositories::AlgorithmRow {
+            id: 1,
+            name: "Referenced Old Algo".into(),
+            group_id: 1,
+            price_coefficient: 1.0,
+            orientation: 0,
+        }],
+        &[],
+    )
+    .expect("initial replace_algorithm_cache failed");
+
+    conn.execute(
+        "INSERT INTO tasks (hash, file_name, algorithm_id, algorithm_name, format, status, created_at)
+         VALUES ('hash-1', 'song.wav', 1, 'Referenced Old Algo', 1, 'waiting', 1)",
+        [],
+    )
+    .expect("task insert failed");
+    conn.execute(
+        "INSERT INTO presets (id, name, algorithm_id, format_id)
+         VALUES ('preset-1', 'Preset', 1, 1)",
+        [],
+    )
+    .expect("preset insert failed");
+
+    mvsep_api_tester::db::repositories::replace_algorithm_cache(
+        &mut conn,
+        &[mvsep_api_tester::db::repositories::AlgorithmGroupRow {
+            id: 2,
+            name: "New Group".into(),
+        }],
+        &[mvsep_api_tester::db::repositories::AlgorithmRow {
+            id: 2,
+            name: "Current Algo".into(),
+            group_id: 2,
+            price_coefficient: 1.0,
+            orientation: 0,
+        }],
+        &[],
+    )
+    .expect("replace should not fail while task/preset reference stale algorithm");
+
+    assert!(
+        mvsep_api_tester::db::repositories::get_algorithm_by_id(&conn, 1)
+            .expect("old algorithm query failed")
+            .is_none(),
+        "stale referenced algorithm should be hidden from the current cache view"
+    );
+    assert!(
+        mvsep_api_tester::db::repositories::get_algorithm_by_id(&conn, 2)
+            .expect("new algorithm query failed")
+            .is_some(),
+        "new algorithm should be visible"
+    );
+    let stale_cached: i32 = conn
+        .query_row("SELECT is_cached FROM algorithms WHERE id = 1", [], |row| {
+            row.get(0)
+        })
+        .expect("stale algorithm row should remain for foreign keys");
+    assert_eq!(stale_cached, 0);
+
+    let current = mvsep_api_tester::db::repositories::get_all_algorithms(&conn)
+        .expect("current algorithm query failed");
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].id, 2);
+    let old_formats = mvsep_api_tester::db::repositories::get_formats_for_algorithm(&conn, 1)
+        .expect("old formats query failed");
+    assert!(old_formats.is_empty());
+    let new_formats = mvsep_api_tester::db::repositories::get_formats_for_algorithm(&conn, 2)
+        .expect("new formats query failed");
+    assert_eq!(new_formats.len(), 6);
 }
 
 // ── Config Tests ──
@@ -340,8 +600,7 @@ fn test_config_save_and_load() {
     };
 
     db.with_conn(|conn| {
-        mvsep_api_tester::db::repositories::save_config(conn, &config)
-            .expect("save_config failed");
+        mvsep_api_tester::db::repositories::save_config(conn, &config).expect("save_config failed");
         Ok(())
     })
     .expect("Save failed");
@@ -406,8 +665,16 @@ fn test_config_partial_update() {
             .expect("get_config failed")
             .unwrap();
         assert_eq!(loaded.token, Some("updated_token".into()));
-        assert_eq!(loaded.api_url, Some("https://initial.com".into()), "api_url should be preserved");
-        assert_eq!(loaded.output_format, Some(1), "output_format should be preserved");
+        assert_eq!(
+            loaded.api_url,
+            Some("https://initial.com".into()),
+            "api_url should be preserved"
+        );
+        assert_eq!(
+            loaded.output_format,
+            Some(1),
+            "output_format should be preserved"
+        );
         Ok(())
     })
     .expect("Verification failed");
@@ -421,8 +688,14 @@ fn test_preset_crud() {
 
     // Setup: algorithm must exist
     db.with_conn(|conn| {
-        conn.execute("INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')", [])?;
-        conn.execute("INSERT INTO algorithms (id, name, group_id) VALUES (1, 'Test Algo', 1)", [])?;
+        conn.execute(
+            "INSERT INTO algorithm_groups (id, name) VALUES (1, 'Test Group')",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO algorithms (id, name, group_id) VALUES (1, 'Test Algo', 1)",
+            [],
+        )?;
         Ok(())
     })
     .expect("Setup failed");
