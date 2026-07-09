@@ -1,121 +1,135 @@
 # mvsep-rs
 
-<p align="center">
-  <a href="https://www.rustacean.net/">
-    <img src="https://www.rustacean.net/assets/rustacean-orig-noshadow.svg" alt="Ferris Rust mascot from rustacean.net" width="96">
-  </a>
-</p>
+MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管理、流式上传下载、断点续传等核心能力。
 
-<p align="center">
-  Ferris 图片: <a href="https://www.rustacean.net/">rustacean.net</a>
-</p>
+[![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
 
-语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+## 功能特性
 
-mvsep-rs 在 1.2 版本中重构了 MVSep 后端，并同步更新了 Tauri 部分。仓库包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
+- **三数据库架构**：算法缓存、任务追踪、用户配置独立管理
+- **流式上传**：基于 tokio 的异步文件上传，支持进度回调和取消
+- **断点续传**：基于 Range 请求和 `.part` 文件的下载恢复机制
+- **任务持久化**：完整的任务生命周期管理和历史记录
+- **代理支持**：手动代理、系统代理、无代理三种模式
 
-当前重写策略是以后端为主：已经迁移到新后端的领域，以新后端存储为准。旧前端存储只作为迁移和回滚辅助；如果同一个任务、历史记录或配置同时存在于旧存储和新后端中，除非某个迁移记录明确写了不同冲突规则，否则以新后端为准。
+## 安装
 
-## 当前状态
-
-- `manifest/rewrite-status.yaml` 中的所有迁移批次都已验证。
-- 项目版本已同步到 `1.2.0`，Tauri 部分使用 Tauri 2。
-- `src/app/backend/gateway.ts` 是前端唯一允许导入 Tauri JavaScript API、调用 `invoke` 或调用 `listen` 的模块。
-- Tauri command 名称和进度事件名称保持稳定，后端实现细节通过 `AppBackend` 替换。
-- 配置、输出格式、算法缓存、上传/下载传输、活动任务和任务历史都已经放到后端 facade 后面。
-- 后端路径由 Tauri 注入的 app config/data 路径解析，不再以进程 cwd、仓库根目录或旧程序本体相对路径为主线依据。
-
-## 仓库结构
-
-```text
-.
-├── src/                       # TypeScript + Vite 前端
-├── src-tauri/                 # Tauri 桌面后端和 AppBackend facade
-├── test-api/                  # 抽取的 Rust MVSep API/后端层和 CLI 测试入口
-├── docs/                      # 架构、使命、ADR 和文档索引
-├── manifest/                  # 机器可读的迁移批次状态
-├── rewrite-records/           # 持久化迁移经验和边界决策
-├── reviews/                   # 各批次审查报告
-├── doc/                       # 本地 MVSep API 笔记
-└── scripts/                   # 构建脚本
-```
-
-## 快速开始
-
-安装 JavaScript 和 Rust 依赖后，可以启动前端或 Tauri 应用：
+### 核心库
 
 ```bash
-npm install
-npm run dev
-npm run tauri dev
+cargo add mvsep-api-tester
 ```
 
-构建前端：
-
-```bash
-npm run build
-```
-
-构建 AppImage：
-
-```bash
-npm run build:appimage
-```
-
-运行独立 Rust CLI 测试入口：
+### CLI 工具
 
 ```bash
 cd test-api
 cargo run --release
 ```
 
-## 验证命令
-
-后端重写相关改动完成后，使用这些基线检查：
+### Tauri 桌面应用
 
 ```bash
-npm run build
-cd src-tauri && cargo test
-cd src-tauri && cargo clippy --all-targets -- -D warnings
-cd test-api && cargo test
-cd test-api && cargo clippy --all-targets -- -D warnings
+npm install
+npm run tauri dev
 ```
 
-前端必须保持 Tauri API 访问集中化：
+## 快速开始
 
-```bash
-rg -n "\binvoke\b|\blisten\b|@tauri-apps" src --glob '*.ts'
+### 数据库操作
+
+```rust
+use mvsep_api_tester::db;
+
+// 打开主数据库（算法缓存）
+let db = db::Database::new(None)?;
+
+// 读取所有算法
+let algorithms = db.with_conn(|conn| {
+    db::repositories::get_all_algorithms(conn)
+})?;
+
+// 打开任务数据库
+let tasks_db = db::tasks_db::TasksDatabase::new(None)?;
+
+// 读取用户配置
+let config_db = db::user_config::UserConfigDB::default()?;
+let token = config_db.get_string("api_token")?;
 ```
 
-严格结果应该只有 `src/app/backend/gateway.ts` 命中。
+### 文件上传
 
-## 路径规则
+```rust
+use mvsep_api_tester::file_transfer::{self, TransferProgress};
 
-后端路径从 Tauri app config/data 目录注入。主要数据库位于注入的 app data 目录下：
+let client = reqwest::Client::new();
+let hash = file_transfer::upload_file_async(
+    &client,
+    "https://api.mvsep.com/upload",
+    std::path::Path::new("./song.mp3"),
+    vec![("api_token", "your-token".to_string())],
+    None,
+    |progress: TransferProgress| {
+        println!("上传: {:.1}%", progress.percent);
+    },
+).await?;
+```
 
-- `mvsep.db`
-- `user_config.db`
-- `tasks.db`
+### 文件下载
 
-上传源文件路径保持用户选择的本地文件路径。下载输出目录可以是绝对路径；`./output` 这类相对输出路径会解析到注入的 app data 目录下，不会解析到旧后端二进制位置、仓库根目录或当前 cwd。
+```rust
+use mvsep_api_tester::file_transfer::{self, TransferProgress};
 
-下载产物的本地路径记录保存在新后端任务/历史数据中。前端应该读取和展示这些后端记录，不要从旧 localStorage 重新推导下载路径。
+let client = reqwest::Client::new();
+file_transfer::download_file_async(
+    &client,
+    "https://api.mvsep.com/download/file.wav",
+    std::path::Path::new("./output/vocals.wav"),
+    "remote_file_name.wav",
+    None,
+    |progress: TransferProgress| {
+        println!("下载: {:.1}%", progress.percent);
+    },
+).await?;
+```
 
-## 文档入口
+## 项目结构
 
-- `docs/INDEX.md`: 智能体和维护者的主入口。
-- `docs/mission.md`: 目标、非目标和重写策略。
-- `docs/architecture/backend-rewrite.md`: 已接受的后端重写架构。
-- `manifest/rewrite-status.yaml`: 批次状态和审查门。
-- `CONTEXT.md`: 项目术语表。
-- `Note.md`: 人类工作笔记和长期偏好。
-- `RESOURCES.md`: 高信度资料和借鉴边界。
-- `rewrite-records/`: 非显然迁移决策和经验。
-- `reviews/`: 行为、追踪、异步、风格、数据和 UX 审查报告。
+```text
+mvsep-rs/
+├── src/                      # TypeScript + Vite 前端
+├── src-tauri/                # Tauri 桌面后端
+│   └── src/lib.rs            # AppBackend facade
+├── test-api/                 # Rust 核心库 (crates.io: mvsep-api-tester)
+│   ├── src/lib.rs            # Crate 入口和公共 API
+│   ├── src/db/               # 数据库层
+│   │   ├── mod.rs            # 主数据库（算法缓存）
+│   │   ├── tasks_db.rs       # 任务数据库
+│   │   ├── user_config.rs    # 用户配置存储
+│   │   └── repositories.rs   # 数据访问层
+│   ├── src/file_transfer.rs  # 文件传输（上传/下载）
+│   └── src/utils/            # 工具函数
+├── docs/                     # 架构文档和 ADR
+└── manifest/                 # 迁移批次状态
+```
 
-## 生成文件
+## API 参考
 
-`dist/`、`node_modules/` 和 Vite 缓存都是本地生成物，不属于源码提交范围。需要时从 `package-lock.json` 和源码重新生成。
+详细文档请访问 [docs.rs](https://docs.rs/mvsep-api-tester)。
+
+### 数据库模块
+
+- [`db::Database`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/struct.Database.html) - 主数据库连接（算法缓存）
+- [`db::tasks_db::TasksDatabase`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/tasks_db/struct.TasksDatabase.html) - 任务数据库
+- [`db::user_config::UserConfigDB`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/user_config/struct.UserConfigDB.html) - 用户配置存储
+
+### 文件传输模块
+
+- [`file_transfer::upload_file_async`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/fn.upload_file_async.html) - 异步文件上传
+- [`file_transfer::download_file_async`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/fn.download_file_async.html) - 异步文件下载（支持断点续传）
+- [`file_transfer::TransferProgress`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/struct.TransferProgress.html) - 传输进度信息
 
 ## 许可证
 

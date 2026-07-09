@@ -1,8 +1,8 @@
-//! 任务数据库（tasks.db）。
+//! 任务数据库（tasks.db）
 //!
 //! 独立的 SQLite 数据库，追踪任务生命周期和下载进度。
 //!
-//! ## 任务状态流转
+//! # 任务状态流转
 //!
 //! ```text
 //! uploaded → queued → processing → done
@@ -10,7 +10,7 @@
 //!                               → expired（文件过期）
 //! ```
 //!
-//! ## 输出文件追踪
+//! # 输出文件追踪
 //!
 //! `output_files` 字段存 JSON，记录每个产物的远程 URL、本地路径、下载状态：
 //!
@@ -24,11 +24,36 @@
 use rusqlite::Connection;
 use std::sync::Mutex;
 
+/// 任务数据库连接
+///
+/// 管理任务和任务历史数据，支持任务状态追踪和下载进度记录。
+/// 默认路径由 [`crate::utils::paths::tasks_db_path`] 确定。
+///
+/// # 示例
+///
+/// ```rust,no_run
+/// use mvsep_api_tester::db::tasks_db;
+///
+/// let db = tasks_db::TasksDatabase::new(None).unwrap();
+/// let tasks = db.with_conn(|conn| {
+///     mvsep_api_tester::db::repositories::get_all_tasks(conn)
+/// }).unwrap();
+/// ```
 pub struct TasksDatabase {
+    /// SQLite 连接（带 Mutex 保护）
     pub conn: Mutex<Connection>,
 }
 
 impl TasksDatabase {
+    /// 创建新的任务数据库连接
+    ///
+    /// # 参数
+    ///
+    /// - `db_path`: 数据库文件路径，`None` 则使用默认路径
+    ///
+    /// # 返回
+    ///
+    /// `Result<Self>` - 数据库实例或错误
     pub fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
         let path = db_path.map(|p| p.to_string()).unwrap_or_else(|| {
             crate::utils::paths::tasks_db_path()
@@ -56,6 +81,17 @@ impl TasksDatabase {
         Ok(db)
     }
 
+    /// 在数据库连接上执行闭包
+    ///
+    /// 获取锁并执行闭包，自动处理锁中毒错误。
+    ///
+    /// # 参数
+    ///
+    /// - `f`: 接受 `&Connection` 并返回 `anyhow::Result<T>` 的闭包
+    ///
+    /// # 返回
+    ///
+    /// `anyhow::Result<T>` - 闭包返回值或错误
     pub fn with_conn<F, T>(&self, f: F) -> anyhow::Result<T>
     where
         F: FnOnce(&Connection) -> anyhow::Result<T>,

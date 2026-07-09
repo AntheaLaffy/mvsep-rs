@@ -33,20 +33,64 @@ use std::time::{Duration, Instant};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
-/// Progress information for upload/download operations.
+/// 上传/下载进度信息
+///
+/// 通过进度回调传递给调用方，每 ~120ms（上传）或 ~150ms（下载）更新一次。
+///
+/// # 示例
+///
+/// ```rust,no_run
+/// use mvsep_api_tester::file_transfer::TransferProgress;
+///
+/// let progress_cb = |p: TransferProgress| {
+///     println!("文件: {}", p.file_name);
+///     println!("进度: {:.1}%", p.percent);
+///     println!("速度: {:.1} KB/s", p.speed_bps / 1024.0);
+///     if p.done {
+///         println!("传输完成!");
+///     }
+/// };
+/// ```
 #[derive(Debug, Clone)]
 pub struct TransferProgress {
+    /// 文件名
     pub file_name: String,
+    /// 已传输字节数
     pub bytes: u64,
+    /// 总字节数（可能未知）
     pub total_bytes: Option<u64>,
+    /// 传输速度（字节/秒）
     pub speed_bps: f64,
+    /// 进度百分比（0-100）
     pub percent: f32,
+    /// 是否已完成
     pub done: bool,
+    /// 是否失败
     pub failed: bool,
 }
 
-/// Structured transfer error used by async callers that need to preserve
-/// HTTP/file context before converting to UI-facing strings.
+/// 结构化传输错误
+///
+/// 用于异步调用者保存 HTTP/文件上下文信息，在转换为面向用户的字符串之前保留详细错误信息。
+///
+/// # 示例
+///
+/// ```rust,no_run
+/// use mvsep_api_tester::file_transfer::TransferError;
+///
+/// let error = TransferError::new("网络连接失败")
+///     .with_url("https://api.example.com/upload")
+///     .with_http_status(503);
+///
+/// if error.is_cancelled() {
+///     println!("传输已取消");
+/// } else {
+///     println!("错误: {}", error);
+///     if let Some(status) = error.http_status() {
+///         println!("HTTP 状态: {}", status);
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct TransferError {
     message: String,
@@ -475,6 +519,39 @@ pub async fn upload_file_async(
     Ok(hash)
 }
 
+/// 同步上传文件（内部创建 tokio runtime）
+///
+/// 提供代理支持的阻塞版本上传函数，适合非异步上下文使用。
+///
+/// # 参数
+///
+/// - `proxy_host`: 代理主机地址（仅在 `proxy_mode` 为 `"manual"` 时有效）
+/// - `proxy_port`: 代理端口（仅在 `proxy_mode` 为 `"manual"` 时有效）
+/// - `proxy_mode`: 代理模式（`"auto"`/`"manual"`/`"none"`）
+/// - `url`: 上传目标 URL
+/// - `file_path`: 本地文件路径
+/// - `extra_fields`: 额外的表单字段（如 API token）
+/// - `progress_cb`: 进度回调函数
+///
+/// # 返回
+///
+/// `anyhow::Result<String>` - 任务 Hash 或错误
+///
+/// # 示例
+///
+/// ```rust,no_run
+/// use mvsep_api_tester::file_transfer;
+///
+/// let hash = file_transfer::upload_file(
+///     "",
+///     0,
+///     "none",
+///     "https://api.mvsep.com/upload",
+///     std::path::Path::new("./song.mp3"),
+///     vec![("api_token", "your-token".to_string())],
+///     |p| println!("上传: {:.1}%", p.percent),
+/// ).unwrap();
+/// ```
 pub fn upload_file(
     proxy_host: &str,
     proxy_port: u16,

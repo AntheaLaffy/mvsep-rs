@@ -1,64 +1,126 @@
+//! 数据访问层
+//!
+//! 提供数据库表的行类型定义和 CRUD 操作函数。
+//!
+//! # 行类型
+//!
+//! | 类型 | 对应表 | 说明 |
+//! |------|--------|------|
+//! | [`AlgorithmGroupRow`] | `algorithm_groups` | 算法分组 |
+//! | [`AlgorithmRow`] | `algorithms` | 算法 |
+//! | [`AlgorithmFieldRow`] | `algorithm_fields` | 算法参数字段 |
+//! | [`TaskRow`] | `tasks` | 活动任务 |
+//! | [`TaskHistoryRow`] | `task_history` | 任务历史 |
+//! | [`PresetRow`] | `presets` | 预设配置 |
+//! | [`ConfigRow`] | `config` | 用户配置 |
+//! | [`OutputFormatRow`] | `output_formats` | 输出格式 |
+//! | [`LogEntryRow`] | `log_entries` | 日志条目 |
+
 use anyhow::Result;
 use colored::Colorize;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
+/// 算法分组行
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmGroupRow {
+    /// 分组 ID
     pub id: i32,
+    /// 分组名称
     pub name: String,
 }
 
+/// 算法行
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmRow {
+    /// 算法 ID
     pub id: i32,
+    /// 算法名称
     pub name: String,
+    /// 所属分组 ID
     pub group_id: i32,
+    /// 价格系数
     #[serde(default)]
     pub price_coefficient: f64,
+    /// 方向标识
     #[serde(default)]
     pub orientation: i32,
 }
 
+/// 算法参数字段行
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmFieldRow {
+    /// 字段 ID
     pub id: i64,
+    /// 所属算法 ID
     pub algorithm_id: i32,
+    /// 字段名称
     pub name: String,
+    /// 字段说明文本
     #[serde(default)]
     pub text: Option<String>,
+    /// 可选值（JSON 数组）
     #[serde(default)]
     pub options: Option<String>,
+    /// 默认选中值的 Key
     #[serde(default)]
     pub default_key: Option<String>,
 }
 
+/// 活动任务行
+///
+/// 用于追踪正在进行的任务状态和下载进度。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRow {
+    /// 任务 Hash（主键）
     pub hash: String,
+    /// 原始文件名
     pub file_name: String,
+    /// 算法 ID
     pub algorithm_id: i32,
+    /// 算法名称
     pub algorithm_name: String,
+    /// 模型 ID（可选）
     pub model_id: Option<i32>,
+    /// 模型名称（可选）
     pub model_name: Option<String>,
+    /// 模型 2 ID（可选）
     pub model2_id: Option<i32>,
+    /// 模型 2 名称（可选）
     pub model2_name: Option<String>,
+    /// 模型 3 ID（可选）
     pub model3_id: Option<i32>,
+    /// 模型 3 名称（可选）
     pub model3_name: Option<String>,
+    /// 输出格式 ID
     pub format: i32,
+    /// 任务状态（uploaded/queued/processing/done/failed）
     pub status: String,
+    /// 任务进度（0-100）
     pub progress: f64,
+    /// 创建时间戳（Unix 毫秒）
     pub created_at: i64,
+    /// 输出文件列表（JSON）
     pub output_files: String,
+    /// 错误信息（可选）
     pub error: Option<String>,
+    /// 提示消息（可选）
     pub message: Option<String>,
+    /// 队列中的位置（可选）
     pub queue_count: Option<i32>,
+    /// 当前排队序号（可选）
     pub current_order: Option<i32>,
+    /// 当前阶段（uploaded/queued/processing/downloading）
     pub phase: String,
+    /// 当前下载文件名（可选）
     pub download_file_name: Option<String>,
+    /// 已下载字节数
     pub download_bytes: i64,
+    /// 总下载字节数（可选）
     pub download_total_bytes: Option<i64>,
+    /// 下载速度（字节/秒）
     pub download_speed_bps: f64,
+    /// 下载进度（0-100）
     pub download_percent: f64,
 }
 

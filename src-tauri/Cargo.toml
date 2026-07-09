@@ -1,10 +1,13 @@
 [package]
 name = "mvsep-gui"
 version = "1.2.0"
-description = "MVSEP GUI - 音乐分离工具"
+description = "MVSEP GUI - Music separation desktop application"
+license = "Apache-2.0"
+readme = "../README.md"
+repository = "https://github.com/AntheaLaffy/mvsep-rs"
+homepage = "https://github.com/AntheaLaffy/mvsep-rs"
 authors = ["AntheaLaffy"]
 edition = "2021"
-license = "MIT"
 
 [lib]
 name = "mvsep_gui_lib"
@@ -28,7 +31,7 @@ log = "0.4"
 dirs = "5"
 futures-util = "0.3"
 tokio-util = "0.7"
-mvsep-api-tester = { path = "../test-api" }
+mvsep-api-tester = "0.1.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd = "0.12.1"

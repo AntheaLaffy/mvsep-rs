@@ -2,6 +2,12 @@
 name = "mvsep-api-tester"
 version = "0.1.0"
 edition = "2021"
+description = "MVSep API tester - CLI tool for testing music separation API"
+license = "Apache-2.0"
+readme = "../README.md"
+repository = "https://github.com/AntheaLaffy/mvsep-rs"
+homepage = "https://github.com/AntheaLaffy/mvsep-rs"
+authors = ["AntheaLaffy"]
 
 [dependencies]
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "blocking"] }
