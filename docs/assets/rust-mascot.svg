@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Rust crab mascot icon for mvsep-rs</title>
+  <desc id="desc">An original crab-shaped Rust mascot icon with gear-like shell details.</desc>
+  <defs>
+    <linearGradient id="shell" x1="28" x2="100" y1="35" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb36b"/>
+      <stop offset="1" stop-color="#b84f21"/>
+    </linearGradient>
+    <linearGradient id="claw" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f08a3c"/>
+      <stop offset="1" stop-color="#9f3d18"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#171513"/>
+  <g fill="none" stroke="#2a211c" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 63 14 51"/>
+    <path d="M96 63 114 51"/>
+    <path d="M36 85 20 98"/>
+    <path d="M92 85 108 98"/>
+  </g>
+  <g fill="url(#claw)" stroke="#2a211c" stroke-width="4" stroke-linejoin="round">
+    <path d="M17 39c10-12 25-5 24 9-11-3-19 2-24 11-8-5-8-13 0-20z"/>
+    <path d="M111 39c-10-12-25-5-24 9 11-3 19 2 24 11 8-5 8-13 0-20z"/>
+  </g>
+  <ellipse cx="64" cy="76" rx="39" ry="30" fill="url(#shell)" stroke="#2a211c" stroke-width="5"/>
+  <path d="M38 67c10-16 42-21 63-4" fill="none" stroke="#ffd1a5" stroke-width="4" stroke-linecap="round" opacity=".75"/>
+  <g fill="#171513">
+    <circle cx="51" cy="67" r="5"/>
+    <circle cx="77" cy="67" r="5"/>
+  </g>
+  <path d="M56 82c4 4 12 4 16 0" fill="none" stroke="#3a2419" stroke-width="4" stroke-linecap="round"/>
+  <g fill="#f6c18a" stroke="#2a211c" stroke-width="3">
+    <circle cx="64" cy="45" r="8"/>
+    <path d="M64 28v8"/>
+    <path d="M64 54v8"/>
+    <path d="M47 45h8"/>
+    <path d="M73 45h8"/>
+    <path d="m52 33 6 6"/>
+    <path d="m76 33-6 6"/>
+    <path d="m52 57 6-6"/>
+    <path d="m76 57-6-6"/>
+  </g>
+</svg>

@@ -1,5 +1,11 @@
 # mvsep-rs
 
+<p align="center">
+  <img src="docs/assets/rust-mascot.svg" alt="Rust crab mascot icon for mvsep-rs" width="96">
+</p>
+
+语言: [中文](README.md) | [English](README.en.md)
+
 mvsep-rs 是面向 MVSep 音频分离流程的 Tauri 2 桌面客户端和 Rust 后端重写工程。仓库同时包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
 
 当前重写策略是以后端为主：已经迁移到新后端的领域，以新后端存储为准。旧前端存储只作为迁移和回滚辅助；如果同一个任务、历史记录或配置同时存在于旧存储和新后端中，除非某个迁移记录明确写了不同冲突规则，否则以新后端为准。
