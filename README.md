@@ -1,216 +1,108 @@
 # mvsep-rs
 
-> MVSep 后端重构 · MVP 阶段
+mvsep-rs 是面向 MVSep 音频分离流程的 Tauri 2 桌面客户端和 Rust 后端重写工程。仓库同时包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
 
-MVSep（https://mvsep.com）是一个在线音频分离平台。**mvsep-rs** 是对其后端 API 交互的 Rust 重构，包含一个独立的 CLI 测试工具（`test-api`）和原有的 Tauri 桌面客户端。
+当前重写策略是以后端为主：已经迁移到新后端的领域，以新后端存储为准。旧前端存储只作为迁移和回滚辅助；如果同一个任务、历史记录或配置同时存在于旧存储和新后端中，除非某个迁移记录明确写了不同冲突规则，否则以新后端为准。
 
-本仓库的目标是：用 Rust 实现 MVSep 完整 API 交互层，包括算法缓存、流式上传下载、断点续传、任务管理等核心能力，为后续前端/桌面端提供可靠的基础库。
+## 当前状态
 
----
+- `manifest/rewrite-status.yaml` 中的所有迁移批次都已验证。
+- `src/app/backend/gateway.ts` 是前端唯一允许导入 Tauri JavaScript API、调用 `invoke` 或调用 `listen` 的模块。
+- Tauri command 名称和进度事件名称保持稳定，后端实现细节通过 `AppBackend` 替换。
+- 配置、输出格式、算法缓存、上传/下载传输、活动任务和任务历史都已经放到后端 facade 后面。
+- 后端路径由 Tauri 注入的 app config/data 路径解析，不再以进程 cwd、仓库根目录或旧程序本体相对路径为主线依据。
 
-## 项目结构
+## 仓库结构
 
-```
+```text
 .
-├── test-api/              # 📦 API 测试工具（主项目，MVP 阶段）
-│   ├── src/
-│   │   ├── main.rs         # 交互式 CLI（菜单驱动）
-│   │   ├── file_transfer.rs # 文件传输模块（流式上传下载、断点续传）
-│   │   ├── db/             # 数据库层（SQLite）
-│   │   │   ├── tasks_db.rs  # 任务数据库
-│   │   │   ├── migrations.rs
-│   │   │   ├── repositories.rs
-│   │   │   └── user_config.rs
-│   │   └── utils/
-│   └── tests/
-├── src/                   # 🖥️ 原有前端（TypeScript + Vite）
-├── src-tauri/             # 🖥️ 原有 Tauri 桌面客户端（Rust）
-├── doc/                   # 📖 API 参考文档
-└── scripts/               # 构建脚本
+├── src/                       # TypeScript + Vite 前端
+├── src-tauri/                 # Tauri 桌面后端和 AppBackend facade
+├── test-api/                  # 抽取的 Rust MVSep API/后端层和 CLI 测试入口
+├── docs/                      # 架构、使命、ADR 和文档索引
+├── manifest/                  # 机器可读的迁移批次状态
+├── rewrite-records/           # 持久化迁移经验和边界决策
+├── reviews/                   # 各批次审查报告
+├── doc/                       # 本地 MVSep API 笔记
+└── scripts/                   # 构建脚本
 ```
-
----
-
-## 三数据库架构
-
-| 数据库 | 位置 | 内容 |
-|--------|------|------|
-| **`mvsep.db`** | 远端缓存 | 算法列表、字段、格式定义、算法-格式关联 |
-| **`tasks.db`** | 任务追踪 | 任务记录、任务历史、下载进度、输出文件清单 |
-| **`user_config.db`** | 用户配置 | Token、代理、输出目录、预设、缓存元数据 |
-
-三者独立，通过 hash / ID 关联。
-
----
-
-## 预设系统
-
-预设是一组"算法 + 参数 + 格式"的快捷保存，存储在 `user_config.db` 中（JSON 格式）。
-
-### 创建预设
-
-| 入口 | 触发方式 | 说明 |
-|------|---------|------|
-| `[b]` 浏览算法 | 按 `s` | 选算法 ID → 命名保存 |
-| `[3]` 创建任务时 | 按 `s`（上传前） | 自动保存当前全部参数 |
-| `[c]` → `[s]` | 直接按 | 手动输入算法/格式/参数 |
-
-### 加载预设
-
-| 入口 | 触发方式 |
-|------|---------|
-| `[3]` 创建任务时 | 在 `Sep Type ID` 提示处输入 `l` |
-
-### 删除预设
-
-`[c]` → `[d]` → 选择预设名称删除。
-
----
-
-## 任务数据库（tasks.db）
-
-任务生命周期通过 `tasks.db` 追踪，每条任务记录包含：
-
-```
-hash          — API 返回的唯一标识
-file_name     — 上传的原始文件名
-algorithm_id  — 使用的算法 ID
-format        — 输出格式 ID
-status        — 当前状态（uploaded / queued / processing / done / expired / failed / cancelled）
-output_files  — JSON 数组，记录每个产物文件的下载状态
-```
-
-### 任务状态流转
-
-```
-uploaded → queued → processing → done
-                    → failed
-                              → expired（文件过期不可下载）
-```
-
-### 输出文件追踪
-
-`output_files` 字段存 JSON，记录每个产物的远程 URL、本地路径、下载状态：
-
-```json
-[
-  {"remote_name": "vocals.flac", "url": "https://...", "size": 74290000, "downloaded": true, "local_path": "/output/xxx_vocals.flac"},
-  {"remote_name": "other.flac",  "url": "https://...", "size": 74290000, "downloaded": false, "local_path": null}
-]
-```
-
-- 下载时自动跳过已完成的文件
-- 如果文件被删除但 DB 标记为已下载，会检测到磁盘不存在后重新下载
-
----
-
-## 用户配置数据库（user_config.db）
-
-基于 KV 存储的 `UserConfigDB`，所有配置项以 key-value 形式存储：
-
-### 配置项清单
-
-| Key | 类型 | 说明 | 默认值 |
-|-----|------|------|--------|
-| `token` | string | API 令牌 | 空 |
-| `proxy_mode` | string | 代理模式（system/manual/none） | `system` |
-| `proxy_host` | string | 代理主机 | `127.0.0.1` |
-| `proxy_port` | string | 代理端口 | `7897` |
-| `output_dir` | string | 下载输出目录 | `./output` |
-| `output_format` | int | 默认输出格式 ID | `1`（WAV 16bit） |
-| `premium_enabled` | int | Premium 模式开关 | `0` |
-| `long_filenames_enabled` | int | 长文件名开关 | `0` |
-| `algorithm_last_fetched_at` | int | 算法缓存最后拉取时间（Unix 时间戳） | 无 |
-| `algorithm_auto_refresh_days` | int | 算法缓存自动刷新天数 | `15` |
-| `preset:{名称}` | json | 用户预设（算法+参数+格式） | — |
-
-### API 方式
-
-```rust
-use mvsep_api_tester::db::user_config::UserConfigDB;
-
-let ucfg = UserConfigDB::new("path/to/user_config.db")?;
-
-// 读写
-ucfg.set_string("token", "xxx")?;
-let token = ucfg.get_string("token")?;
-
-ucfg.set_int("output_format", 2)?;
-let fmt = ucfg.get_int("output_format")?;
-
-// 预设（JSON）
-let preset = serde_json::json!({"name":"vocal","algorithm_id":48});
-ucfg.set_json("preset:my_vocal", &preset)?;
-let loaded: serde_json::Value = ucfg.get_json("preset:my_vocal")?.unwrap();
-```
-
----
-
-## 功能
-
-| 功能 | 说明 |
-|------|------|
-| **算法缓存** | 从 API 拉取算法列表和参数选项，本地缓存带过期检查 |
-| **创建任务** | 选择算法、模型参数、输出格式，流式上传带进度显示 |
-| **轮询状态** | 自动/手动轮询，区分排队/分离中/完成/过期/失败 |
-| **断点续传下载** | 流式下载，支持中断恢复，按原文件名重命名产物 |
-| **取消任务** | 取消正在处理的任务 |
-| **任务管理** | 本地数据库追踪所有任务，按文件粒度跟踪下载状态 |
-| **用户偏好** | Token、代理、输出目录、默认格式等配置管理 |
-| **算法浏览** | 按分组浏览所有算法，标注免费/Premium |
-| **预设系统** | 保存/加载常用算法配置组合 |
-
----
 
 ## 快速开始
+
+安装 JavaScript 和 Rust 依赖后，可以启动前端或 Tauri 应用：
+
+```bash
+npm install
+npm run dev
+npm run tauri dev
+```
+
+构建前端：
+
+```bash
+npm run build
+```
+
+构建 AppImage：
+
+```bash
+npm run build:appimage
+```
+
+运行独立 Rust CLI 测试入口：
 
 ```bash
 cd test-api
 cargo run --release
 ```
 
-首次使用：
-1. 按 `2` 设置 API Token（从 https://mvsep.com/user-api 获取）
-2. 按 `p` 配置代理（如需要）
-3. 按 `r` 从 API 拉取算法缓存
-4. 按 `3` 创建第一个分离任务
+## 验证命令
 
-### 菜单
+后端重写相关改动完成后，使用这些基线检查：
 
-```
-[l] Logout
-[p] Configure Proxy
-[c] User Preferences
-[3] Create Task ⭐
-[t] List Tasks (from DB)
-[o] Operate Task (enter hash)
-──────────────
-[b] Browse Algorithms (from DB)
-[h] API Reference
-[9] Get User Info
-[a] Run All Tests
-[r] Refresh Algorithm Cache
-[q] Quit
+```bash
+npm run build
+cd src-tauri && cargo test
+cd src-tauri && cargo clippy --all-targets -- -D warnings
+cd test-api && cargo test
+cd test-api && cargo clippy --all-targets -- -D warnings
 ```
 
----
+前端必须保持 Tauri API 访问集中化：
 
-## 技术栈
+```bash
+rg -n "\binvoke\b|\blisten\b|@tauri-apps" src --glob '*.ts'
+```
 
-- **语言**: Rust (edition 2021)
-- **HTTP 客户端**: reqwest（async + blocking）
-- **异步运行时**: tokio
-- **数据库**: SQLite (rusqlite)
-- **桌面壳**: Tauri 2（原有 GUI）
+严格结果应该只有 `src/app/backend/gateway.ts` 命中。
 
----
+## 路径规则
 
-## 环境要求
+后端路径从 Tauri app config/data 目录注入。主要数据库位于注入的 app data 目录下：
 
-- Rust stable（推荐 `rustup` 安装）
-- SQLite（bundled，无需单独安装）
+- `mvsep.db`
+- `user_config.db`
+- `tasks.db`
 
----
+上传源文件路径保持用户选择的本地文件路径。下载输出目录可以是绝对路径；`./output` 这类相对输出路径会解析到注入的 app data 目录下，不会解析到旧后端二进制位置、仓库根目录或当前 cwd。
+
+下载产物的本地路径记录保存在新后端任务/历史数据中。前端应该读取和展示这些后端记录，不要从旧 localStorage 重新推导下载路径。
+
+## 文档入口
+
+- `docs/INDEX.md`: 智能体和维护者的主入口。
+- `docs/mission.md`: 目标、非目标和重写策略。
+- `docs/architecture/backend-rewrite.md`: 已接受的后端重写架构。
+- `manifest/rewrite-status.yaml`: 批次状态和审查门。
+- `CONTEXT.md`: 项目术语表。
+- `Note.md`: 人类工作笔记和长期偏好。
+- `RESOURCES.md`: 高信度资料和借鉴边界。
+- `rewrite-records/`: 非显然迁移决策和经验。
+- `reviews/`: 行为、追踪、异步、风格、数据和 UX 审查报告。
+
+## 生成文件
+
+`dist/`、`node_modules/` 和 Vite 缓存都是本地生成物，不属于源码提交范围。需要时从 `package-lock.json` 和源码重新生成。
 
 ## 许可证
 
