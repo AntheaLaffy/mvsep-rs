@@ -4,6 +4,7 @@ MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管�
 
 [![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
 [![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
 [![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
 
 ## 功能特性
@@ -16,20 +17,63 @@ MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管�
 
 ## 安装
 
-### 核心库
+### Arch Linux / Manjaro (AUR)
 
 ```bash
-cargo add mvsep-api-tester
+# 预编译二进制版本（推荐，快速安装）
+paru -S mvsep-gui-bin
+# 或
+yay -S mvsep-gui-bin
+
+# 源码构建版本（需要 Rust 和 Node.js）
+paru -S mvsep-gui
+# 或
+yay -S mvsep-gui
 ```
 
-### CLI 工具
+### 从 GitHub Release 下载
 
 ```bash
-cd test-api
-cargo run --release
+# Linux
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/mvsep-gui
+chmod +x mvsep-gui
+sudo mv mvsep-gui /usr/bin/
+
+# Windows
+# 下载 MVSEP_1.2.0_x64-setup.exe 并运行安装程序
+
+# Debian/Ubuntu
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
+sudo dpkg -i MVSEP_1.2.0_amd64.deb
+
+# Fedora/RHEL
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
 ```
 
-### Tauri 桌面应用
+### 源码构建
+
+```bash
+# 安装依赖
+sudo pacman -S webkit2gtk libappindicator-gtk3 librsvg libvips npm nodejs
+
+# 克隆仓库
+git clone https://github.com/AntheaLaffy/mvsep-rs.git
+cd mvsep-rs
+
+# 构建前端
+npm install
+npm run build
+
+# 构建后端
+cd src-tauri
+cargo build --release
+
+# 运行
+./target/release/mvsep-gui
+```
+
+### 开发模式
 
 ```bash
 npm install
