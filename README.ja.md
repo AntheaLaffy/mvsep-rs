@@ -1,14 +1,6 @@
-# mvsep-rs
+# MVSEP - 音楽分離ツール
 
-<p align="center">
-  <a href="https://www.rustacean.net/">
-    <img src="https://www.rustacean.net/assets/rustacean-orig-noshadow.svg" alt="rustacean.net の Rust マスコット Ferris" width="96">
-  </a>
-</p>
-
-<p align="center">
-  Ferris 画像: <a href="https://www.rustacean.net/">rustacean.net</a>
-</p>
+MVSEP デスクトップクライアント。音楽をボーカル、伴奏、ドラム、ベースなどのトラックに分離します。ドラッグアンドドロップアップロード、ワンクリック操作、タスク管理、再開可能なダウンロードに対応しています。
 
 [![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
 [![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
@@ -17,33 +9,20 @@
 
 言語: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-mvsep-rs は 1.2 版で MVSep バックエンドをリファクタリングし、Tauri 部分も更新しました。このリポジトリには、デスクトップ UI、Tauri command facade、そして `test-api` から抽出して安定化した Rust API/バックエンド機能が含まれます。対象は設定、アルゴリズムキャッシュ、アップロード/ダウンロード転送、タスク永続化、ダウンロード状態です。
+## 機能
 
-現在のリライト方針は新バックエンド優先です。すでに新バックエンドへ移行した領域では、新バックエンドのストアを正とします。従来のフロントエンド保存は、移行とロールバックの補助に限ります。同じタスク、履歴、設定が旧ストレージと新バックエンドの両方に存在する場合、移行記録で別の競合規則が明示されていない限り、新バックエンドを優先します。
+### ユーザー機能
+- **ドラッグアンドドロップ** - ウィンドウにオーディオファイルをドラッグして処理を開始
+- **ワンクリック操作** - アップロード → 分離待ち → 自動ダウンロード、手動操作不要
+- **タスク管理** - リアルタイムで分離進捗を確認、中断・ダウンロード・削除に対応
+- **複数アルゴリズム** - 複数の分離アルゴリズムとモデルに対応
+- **再開可能なダウンロード** - 中断後も再びダウンロードボタンをクリックして続行可能
+- **プロキシサポート** - システムプロキシ、手動プロキシ、プロキシなしの三つのモード
 
-## 現在の状態
-
-- `manifest/rewrite-status.yaml` にあるすべての移行バッチは検証済みです。
-- プロジェクトのバージョンメタデータは `1.2.0` に同期済みで、Tauri 部分は Tauri 2 を使用しています。
-- `src/app/backend/gateway.ts` は、Tauri JavaScript API の import、`invoke`、`listen` を許可されている唯一のフロントエンドモジュールです。
-- Tauri command 名と進捗イベント名は安定させたまま、バックエンド実装の詳細を `AppBackend` 経由で置き換えます。
-- 設定、出力形式、アルゴリズムキャッシュ、アップロード/ダウンロード転送、アクティブタスク、タスク履歴はバックエンド facade の背後にあります。
-- バックエンドパスは Tauri から注入された app config/data パスで解決します。プロセス cwd、リポジトリルート、旧プログラム本体からの相対パスは主線の基準ではありません。
-
-## リポジトリ構成
-
-```text
-.
-├── src/                       # TypeScript + Vite フロントエンド
-├── src-tauri/                 # Tauri デスクトップバックエンドと AppBackend facade
-├── test-api/                  # 抽出済み Rust MVSep API/バックエンド層と CLI テスト入口
-├── docs/                      # アーキテクチャ、ミッション、ADR、ドキュメント索引
-├── manifest/                  # 機械可読な移行バッチ状態
-├── rewrite-records/           # 永続化された移行知見と境界判断
-├── reviews/                   # 各バッチのレビュー報告
-├── doc/                       # ローカル MVSep API メモ
-└── scripts/                   # ビルドスクリプト
-```
+### 技術的特徴
+- **三層データベースアーキテクチャ**: アルゴリズムキャッシュ、タスク追跡、ユーザー設定を独立して管理
+- **ストリーミングアップロード**: tokio ベースの非同期ファイルアップロード、進捗コールバックとキャンセルに対応
+- **タスク永続化**: 完全なタスクライフサイクル管理と履歴記録
 
 ## インストール
 
@@ -61,22 +40,20 @@ paru -S mvsep-gui
 yay -S mvsep-gui
 ```
 
-### GitHub Release からダウンロード
+### Windows
+
+`MVSEP_1.2.0_x64-setup.exe` をダウンロードしてインストーラーを実行します。
+
+### Debian/Ubuntu
 
 ```bash
-# Linux
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/mvsep-gui
-chmod +x mvsep-gui
-sudo mv mvsep-gui /usr/bin/
-
-# Windows
-# MVSEP_1.2.0_x64-setup.exe をダウンロードしてインストーラーを実行します
-
-# Debian/Ubuntu
 wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
 sudo dpkg -i MVSEP_1.2.0_amd64.deb
+```
 
-# Fedora/RHEL
+### Fedora/RHEL
+
+```bash
 wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
 sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
 ```
@@ -103,82 +80,127 @@ cargo build --release
 ./target/release/mvsep-gui
 ```
 
-### クイックスタート
+## クイックスタート
 
-JavaScript と Rust の依存関係をインストールしてから、フロントエンドまたは Tauri アプリを起動します。
+### 1. 初回設定
+
+以下の設定が必要です：
+
+| 設定項目 | 説明 |
+|----------|------|
+| **API Token** | 必須。[MVSEP ウェブサイト](https://mvsep.com/user-api) から取得 |
+| **出力ディレクトリ** | 分離結果の保存先 |
+| **出力フォーマット** | MP3/WAV/FLAC/M4A など |
+
+### 2. 分離を開始
+
+1. **ホームページ** - オーディオファイルをドラッグ、またはファイル選択をクリック
+2. **アルゴリズム**と**モデルオプション**を選択（オプション）
+3. **出力フォーマット**を選択
+4. **ワンクリック実行**をクリック、完了後自動的にローカルにダウンロード
+
+### 3. タスクを確認
+
+- **タスクページ** - 実行中および履歴タスクを確認
+- **ダウンロード**をクリックして個別のファイルをダウンロード
+- 実行中のタスクを**キャンセル**可能
+
+## ページ概要
+
+| ページ | 機能 |
+|--------|------|
+| ホーム | オーディオアップロード、パラメータ選択、ワンクリック実行 |
+| タスク | 進捗確認、結果ダウンロード、タスク管理 |
+| アルゴリズム | 使用可能なアルゴリズムとモデルの閲覧、プリセットの保存 |
+| 設定 | API Token、プロキシ、出力ディレクトリなどの設定 |
+| ログ | 実行ログの確認、問題解決に使用 |
+
+## FAQ
+
+### API Token はどこで取得できますか？
+
+1. [MVSEP](https://mvsep.com) にログイン
+2. 右上のユーザー名をクリック → **API** を選択
+3. Token をコピーしてクライアントの設定ページに貼り付け
+
+### 分離速度が遅いですか？
+
+- **タスクページ**でキュー情報を確認し、現在の待機人数を確認
+- 異なるアルゴリズムに切り替えると処理速度が向上する場合があります
+- デモモード（無料だが結果は公開）を検討してください
+
+### ダウンロードが中断されましたか？
+
+心配しないでください。クライアントは**再開可能なダウンロード**をサポートしています。ダウンロードボタンをもう一度クリックするだけで中断箇所から続行できます。
+
+### アルゴリズムリストを更新するには？
+
+**アルゴリズムページ**に移動し、「最新アルゴリズム情報を取得」をクリックしてサーバーから取得します。
+
+## 開発者ガイド
+
+### 開発モード
 
 ```bash
 npm install
-npm run dev
 npm run tauri dev
 ```
 
-フロントエンドをビルドします。
-
-```bash
-npm run build
-```
-
-AppImage をビルドします。
+### AppImage をビルド
 
 ```bash
 npm run build:appimage
 ```
 
-独立した Rust CLI テスト入口を実行します。
+### データベース操作（Rust）
 
-```bash
-cd test-api
-cargo run --release
+```rust
+use mvsep_api_tester::db;
+
+let db = db::Database::new(None)?;
+let algorithms = db.with_conn(|conn| {
+    db::repositories::get_all_algorithms(conn)
+})?;
 ```
 
-## 検証コマンド
+### ファイルアップロード（Rust）
 
-バックエンドリライト関連の変更後は、次の基線チェックを使います。
+```rust
+use mvsep_api_tester::file_transfer::{self, TransferProgress};
 
-```bash
-npm run build
-cd src-tauri && cargo test
-cd src-tauri && cargo clippy --all-targets -- -D warnings
-cd test-api && cargo test
-cd test-api && cargo clippy --all-targets -- -D warnings
+let hash = file_transfer::upload_file_async(
+    &client, "https://api.mvsep.com/upload",
+    std::path::Path::new("./song.mp3"),
+    vec![("api_token", "your-token".to_string())],
+    None, |progress| {
+        println!("Upload: {:.1}%", progress.percent);
+    },
+).await?;
 ```
 
-フロントエンドからの Tauri API アクセスは集中化されている必要があります。
+## プロジェクト構造
 
-```bash
-rg -n "\binvoke\b|\blisten\b|@tauri-apps" src --glob '*.ts'
+```text
+mvsep-rs/
+├── src/                      # TypeScript + Vite フロントエンド
+├── src-tauri/                # Tauri デスクトップバックエンド
+├── test-api/                 # Rust コアライブラリ (crates.io: mvsep-api-tester)
+│   ├── src/db/               # データベース層
+│   ├── src/file_transfer.rs  # ファイル転送（アップロード/ダウンロード）
+│   └── src/utils/            # ユーティリティ関数
+├── docs/                     # アーキテクチャドキュメントと ADR
+└── manifest/                 # マイグレーションバッチステータス
 ```
 
-厳密な期待結果は、`src/app/backend/gateway.ts` だけが一致することです。
+## API リファレンス
 
-## パス規則
+詳細なドキュメントは [docs.rs](https://docs.rs/mvsep-api-tester) をご覧ください。
 
-バックエンドパスは Tauri app config/data ディレクトリから注入されます。主要データベースは注入された app data ディレクトリ配下に置かれます。
+## フィードバック
 
-- `mvsep.db`
-- `user_config.db`
-- `tasks.db`
-
-アップロード元ファイルのパスは、ユーザーが選択したローカルファイルパスを保持します。ダウンロード出力ディレクトリには絶対パスを指定できます。`./output` のような相対出力パスは、注入された app data ディレクトリ配下に解決されます。旧バックエンドの実行ファイル位置、リポジトリルート、現在の cwd には解決されません。
-
-ダウンロード済み成果物のローカルパス記録は、新バックエンドのタスク/履歴データに保存されます。フロントエンドは旧 localStorage からダウンロードパスを再推測せず、これらのバックエンド記録を読み取って表示するべきです。
-
-## ドキュメント入口
-
-- `docs/INDEX.md`: エージェントとメンテナー向けの主入口。
-- `docs/mission.md`: 目標、非目標、リライト戦略。
-- `docs/architecture/backend-rewrite.md`: 採用済みのバックエンドリライトアーキテクチャ。
-- `manifest/rewrite-status.yaml`: バッチ状態とレビューゲート。
-- `CONTEXT.md`: プロジェクト用語集。
-- `Note.md`: 人間向け作業メモと長期的な方針。
-- `RESOURCES.md`: 高信頼資料と借用境界。
-- `rewrite-records/`: 非自明な移行判断と知見。
-- `reviews/`: 振る舞い、トレース、非同期、スタイル、データ、UX のレビュー報告。
-
-## 生成ファイル
-
-`dist/`、`node_modules/`、Vite キャッシュはローカル生成物であり、ソース管理の対象ではありません。必要に応じて `package-lock.json` とソースツリーから再生成します。
+問題が発生した場合：
+1. **ログページ**で詳細なエラー情報を確認
+2. [GitHub Issues](https://github.com/AntheaLaffy/mvsep-rs/issues) で報告
 
 ## ライセンス
 

@@ -1,6 +1,6 @@
-# mvsep-rs
+# MVSEP - 音乐分离工具
 
-MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管理、流式上传下载、断点续传等核心能力。
+MVSEP 桌面客户端，用于将音乐分离为人声、伴奏、鼓点、贝斯等音轨。支持拖拽上传、一键运行、任务管理、断点续传等功能。
 
 [![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
 [![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
@@ -9,15 +9,22 @@ MVSep 音乐分离工具的 Rust 后端实现，提供算法缓存、任务管�
 
 语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-## 功能特性
+## 功能特点
 
+### 用户功能
+- **拖拽上传** - 将音频文件拖入窗口即可开始处理
+- **一键运行** - 上传 → 等待分离完成 → 自动下载，全程无需手动操作
+- **任务管理** - 实时查看分离进度，支持中断、下载、删除任务
+- **多种算法** - 支持多种分离算法和模型可选
+- **断点续传** - 下载中断后再次点击即可继续，无需重新开始
+- **代理支持** - 支持系统代理、手动代理或无代理
+
+### 技术特性
 - **三数据库架构**：算法缓存、任务追踪、用户配置独立管理
 - **流式上传**：基于 tokio 的异步文件上传，支持进度回调和取消
-- **断点续传**：基于 Range 请求和 `.part` 文件的下载恢复机制
 - **任务持久化**：完整的任务生命周期管理和历史记录
-- **代理支持**：手动代理、系统代理、无代理三种模式
 
-## 安装
+## 下载安装
 
 ### Arch Linux / Manjaro (AUR)
 
@@ -33,27 +40,25 @@ paru -S mvsep-gui
 yay -S mvsep-gui
 ```
 
-### 从 GitHub Release 下载
+### Windows
+
+下载 `MVSEP_1.2.0_x64-setup.exe`，运行安装程序即可。
+
+### Debian/Ubuntu
 
 ```bash
-# Linux
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/mvsep-gui
-chmod +x mvsep-gui
-sudo mv mvsep-gui /usr/bin/
-
-# Windows
-# 下载 MVSEP_1.2.0_x64-setup.exe 并运行安装程序
-
-# Debian/Ubuntu
 wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
 sudo dpkg -i MVSEP_1.2.0_amd64.deb
+```
 
-# Fedora/RHEL
+### Fedora/RHEL
+
+```bash
 wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
 sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
 ```
 
-### 源码构建
+### 从源码构建
 
 ```bash
 # 安装依赖
@@ -75,6 +80,65 @@ cargo build --release
 ./target/release/mvsep-gui
 ```
 
+## 快速开始
+
+### 1. 首次设置
+
+首次使用需要配置以下内容：
+
+| 设置项 | 说明 |
+|--------|------|
+| **API Token** | 必填。在 [MVSEP 网站](https://mvsep.com/user-api) 获取 |
+| **输出目录** | 分离结果保存位置 |
+| **输出格式** | 可选 MP3/WAV/FLAC/M4A 等 |
+
+### 2. 开始分离
+
+1. **首页** 拖入音频文件，或点击选择文件
+2. 选择 **算法** 和 **模型选项**（可选）
+3. 选择 **输出格式**
+4. 点击 **一键运行**，等待完成后自动下载到本地
+
+### 3. 查看任务
+
+- **任务页** 查看所有进行中和历史任务
+- 点击 **下载** 可单独下载某个文件
+- 支持 **取消** 进行中的任务
+
+## 页面说明
+
+| 页面 | 功能 |
+|------|------|
+| 首页 | 上传音频、选择参数、一键运行 |
+| 任务 | 查看进度、下载结果、管理任务 |
+| 算法 | 浏览可选算法和模型、保存预设 |
+| 设置 | API Token、代理、输出目录等配置 |
+| 日志 | 查看运行日志，用于问题排查 |
+
+## 常见问题
+
+### 如何获取 API Token？
+
+1. 登录 [MVSEP](https://mvsep.com)
+2. 点击右上角用户名 → 选择 **API**
+3. 复制 Token 并粘贴到客户端设置页
+
+### 分离速度慢怎么办？
+
+- 查看 **任务页** 的队列信息，了解当前排队人数
+- 切换不同算法可能获得更快的处理速度
+- 考虑使用演示模式（免费但结果公开）
+
+### 下载中断怎么办？
+
+无需担心，客户端支持**断点续传**。直接再次点击下载按钮即可从中断处继续。
+
+### 如何更新算法列表？
+
+进入 **算法页**，点击「获取最新算法信息」从服务器拉取最新算法。
+
+## 开发者指南
+
 ### 开发模式
 
 ```bash
@@ -82,61 +146,34 @@ npm install
 npm run tauri dev
 ```
 
-## 快速开始
+### 构建 AppImage
 
-### 数据库操作
+```bash
+npm run build:appimage
+```
+
+### 数据库操作（Rust）
 
 ```rust
 use mvsep_api_tester::db;
 
-// 打开主数据库（算法缓存）
 let db = db::Database::new(None)?;
-
-// 读取所有算法
 let algorithms = db.with_conn(|conn| {
     db::repositories::get_all_algorithms(conn)
 })?;
-
-// 打开任务数据库
-let tasks_db = db::tasks_db::TasksDatabase::new(None)?;
-
-// 读取用户配置
-let config_db = db::user_config::UserConfigDB::default()?;
-let token = config_db.get_string("api_token")?;
 ```
 
-### 文件上传
+### 文件上传（Rust）
 
 ```rust
 use mvsep_api_tester::file_transfer::{self, TransferProgress};
 
-let client = reqwest::Client::new();
 let hash = file_transfer::upload_file_async(
-    &client,
-    "https://api.mvsep.com/upload",
+    &client, "https://api.mvsep.com/upload",
     std::path::Path::new("./song.mp3"),
     vec![("api_token", "your-token".to_string())],
-    None,
-    |progress: TransferProgress| {
+    None, |progress| {
         println!("上传: {:.1}%", progress.percent);
-    },
-).await?;
-```
-
-### 文件下载
-
-```rust
-use mvsep_api_tester::file_transfer::{self, TransferProgress};
-
-let client = reqwest::Client::new();
-file_transfer::download_file_async(
-    &client,
-    "https://api.mvsep.com/download/file.wav",
-    std::path::Path::new("./output/vocals.wav"),
-    "remote_file_name.wav",
-    None,
-    |progress: TransferProgress| {
-        println!("下载: {:.1}%", progress.percent);
     },
 ).await?;
 ```
@@ -147,14 +184,8 @@ file_transfer::download_file_async(
 mvsep-rs/
 ├── src/                      # TypeScript + Vite 前端
 ├── src-tauri/                # Tauri 桌面后端
-│   └── src/lib.rs            # AppBackend facade
 ├── test-api/                 # Rust 核心库 (crates.io: mvsep-api-tester)
-│   ├── src/lib.rs            # Crate 入口和公共 API
 │   ├── src/db/               # 数据库层
-│   │   ├── mod.rs            # 主数据库（算法缓存）
-│   │   ├── tasks_db.rs       # 任务数据库
-│   │   ├── user_config.rs    # 用户配置存储
-│   │   └── repositories.rs   # 数据访问层
 │   ├── src/file_transfer.rs  # 文件传输（上传/下载）
 │   └── src/utils/            # 工具函数
 ├── docs/                     # 架构文档和 ADR
@@ -165,17 +196,11 @@ mvsep-rs/
 
 详细文档请访问 [docs.rs](https://docs.rs/mvsep-api-tester)。
 
-### 数据库模块
+## 反馈问题
 
-- [`db::Database`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/struct.Database.html) - 主数据库连接（算法缓存）
-- [`db::tasks_db::TasksDatabase`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/tasks_db/struct.TasksDatabase.html) - 任务数据库
-- [`db::user_config::UserConfigDB`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/db/user_config/struct.UserConfigDB.html) - 用户配置存储
-
-### 文件传输模块
-
-- [`file_transfer::upload_file_async`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/fn.upload_file_async.html) - 异步文件上传
-- [`file_transfer::download_file_async`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/fn.download_file_async.html) - 异步文件下载（支持断点续传）
-- [`file_transfer::TransferProgress`](https://docs.rs/mvsep-api-tester/latest/mvsep_api_tester/file_transfer/struct.TransferProgress.html) - 传输进度信息
+如遇问题：
+1. 查看 **日志页** 了解详细错误信息
+2. 访问 [GitHub Issues](https://github.com/AntheaLaffy/mvsep-rs/issues) 报告
 
 ## 许可证
 
