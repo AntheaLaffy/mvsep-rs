@@ -1,6 +1,6 @@
 [package]
 name = "mvsep-gui"
-version = "1.0.0"
+version = "1.2.0"
 description = "MVSEP GUI - 音乐分离工具"
 authors = ["AntheaLaffy"]
 edition = "2021"

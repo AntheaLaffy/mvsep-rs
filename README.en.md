@@ -12,13 +12,14 @@
 
 Languages: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-mvsep-rs is a Tauri 2 desktop client and Rust backend rewrite for MVSep audio separation workflows. The repository contains the desktop UI, the Tauri command facade, and the extracted Rust API/backend layer from `test-api`: config, algorithm cache, upload and download transfer, task persistence, and download state.
+Version 1.2 of mvsep-rs refactors the MVSep backend and updates the Tauri side as well. The repository contains the desktop UI, the Tauri command facade, and the extracted Rust API/backend layer from `test-api`: config, algorithm cache, upload and download transfer, task persistence, and download state.
 
 The current rewrite policy is backend-first: for domains already migrated to the rewritten backend, the rewritten backend store is canonical. Legacy frontend storage is only a migration and rollback aid. If the same task, history record, or configuration exists in both old storage and the rewritten backend, prefer the rewritten backend unless a migration record explicitly documents a different conflict rule.
 
 ## Current State
 
 - All migration batches in `manifest/rewrite-status.yaml` are verified.
+- Project version metadata is synchronized to `1.2.0`, with the Tauri side on Tauri 2.
 - `src/app/backend/gateway.ts` is the only frontend module allowed to import Tauri JavaScript APIs, call `invoke`, or call `listen`.
 - Tauri command names and progress event names remain stable while backend implementation details are replaced through `AppBackend`.
 - Config, output formats, algorithm cache, upload/download transfer, active tasks, and task history are behind the backend facade.

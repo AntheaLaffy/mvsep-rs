@@ -12,13 +12,14 @@
 
 语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-mvsep-rs 是面向 MVSep 音频分离流程的 Tauri 2 桌面客户端和 Rust 后端重写工程。仓库同时包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
+mvsep-rs 在 1.2 版本中重构了 MVSep 后端，并同步更新了 Tauri 部分。仓库包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
 
 当前重写策略是以后端为主：已经迁移到新后端的领域，以新后端存储为准。旧前端存储只作为迁移和回滚辅助；如果同一个任务、历史记录或配置同时存在于旧存储和新后端中，除非某个迁移记录明确写了不同冲突规则，否则以新后端为准。
 
 ## 当前状态
 
 - `manifest/rewrite-status.yaml` 中的所有迁移批次都已验证。
+- 项目版本已同步到 `1.2.0`，Tauri 部分使用 Tauri 2。
 - `src/app/backend/gateway.ts` 是前端唯一允许导入 Tauri JavaScript API、调用 `invoke` 或调用 `listen` 的模块。
 - Tauri command 名称和进度事件名称保持稳定，后端实现细节通过 `AppBackend` 替换。
 - 配置、输出格式、算法缓存、上传/下载传输、活动任务和任务历史都已经放到后端 facade 后面。
