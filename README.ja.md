@@ -1,29 +1,121 @@
 # mvsep-rs
 
-> MVSep バックエンド再構築 · MVP ステージ
+<p align="center">
+  <a href="https://www.rustacean.net/">
+    <img src="https://www.rustacean.net/assets/rustacean-orig-noshadow.svg" alt="rustacean.net の Rust マスコット Ferris" width="96">
+  </a>
+</p>
 
-詳細は[中国語 README](./README.md)を参照してください。
+<p align="center">
+  Ferris 画像: <a href="https://www.rustacean.net/">rustacean.net</a>
+</p>
 
-## 3つのデータベース
+言語: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-| データベース | 内容 |
-|-------------|------|
-| **`mvsep.db`** | アルゴリズムキャッシュ（グループ、フィールド、フォーマット） |
-| **`tasks.db`** | タスク追跡（タスク、履歴、ダウンロード進捗） |
-| **`user_config.db`** | ユーザー設定（トークン、プロキシ、プリセット） |
+mvsep-rs は、MVSep の音源分離ワークフロー向けの Tauri 2 デスクトップクライアントであり、Rust バックエンドのリライト工程です。このリポジトリには、デスクトップ UI、Tauri command facade、そして `test-api` から抽出して安定化した Rust API/バックエンド機能が含まれます。対象は設定、アルゴリズムキャッシュ、アップロード/ダウンロード転送、タスク永続化、ダウンロード状態です。
 
-## CLI テスター
+現在のリライト方針は新バックエンド優先です。すでに新バックエンドへ移行した領域では、新バックエンドのストアを正とします。従来のフロントエンド保存は、移行とロールバックの補助に限ります。同じタスク、履歴、設定が旧ストレージと新バックエンドの両方に存在する場合、移行記録で別の競合規則が明示されていない限り、新バックエンドを優先します。
+
+## 現在の状態
+
+- `manifest/rewrite-status.yaml` にあるすべての移行バッチは検証済みです。
+- `src/app/backend/gateway.ts` は、Tauri JavaScript API の import、`invoke`、`listen` を許可されている唯一のフロントエンドモジュールです。
+- Tauri command 名と進捗イベント名は安定させたまま、バックエンド実装の詳細を `AppBackend` 経由で置き換えます。
+- 設定、出力形式、アルゴリズムキャッシュ、アップロード/ダウンロード転送、アクティブタスク、タスク履歴はバックエンド facade の背後にあります。
+- バックエンドパスは Tauri から注入された app config/data パスで解決します。プロセス cwd、リポジトリルート、旧プログラム本体からの相対パスは主線の基準ではありません。
+
+## リポジトリ構成
+
+```text
+.
+├── src/                       # TypeScript + Vite フロントエンド
+├── src-tauri/                 # Tauri デスクトップバックエンドと AppBackend facade
+├── test-api/                  # 抽出済み Rust MVSep API/バックエンド層と CLI テスト入口
+├── docs/                      # アーキテクチャ、ミッション、ADR、ドキュメント索引
+├── manifest/                  # 機械可読な移行バッチ状態
+├── rewrite-records/           # 永続化された移行知見と境界判断
+├── reviews/                   # 各バッチのレビュー報告
+├── doc/                       # ローカル MVSep API メモ
+└── scripts/                   # ビルドスクリプト
+```
+
+## クイックスタート
+
+JavaScript と Rust の依存関係をインストールしてから、フロントエンドまたは Tauri アプリを起動します。
+
+```bash
+npm install
+npm run dev
+npm run tauri dev
+```
+
+フロントエンドをビルドします。
+
+```bash
+npm run build
+```
+
+AppImage をビルドします。
+
+```bash
+npm run build:appimage
+```
+
+独立した Rust CLI テスト入口を実行します。
 
 ```bash
 cd test-api
 cargo run --release
 ```
 
-### 機能
+## 検証コマンド
 
-- アルゴリズムキャッシュ（APIから取得、期限切れチェック）
-- タスク作成（ストリーミングアップロード + 進捗表示）
-- ステータスポーリング（自動/手動、待機/処理中/完了/期限切れ）
-- レジュームダウンロード（`.part` + `Range` ヘッダー）
-- ファイル名変換：`{元ファイル名}_{サフィックス}.{ext}`
-- アルゴリズム一覧（グループ別、無料/プレミアム表示）
+バックエンドリライト関連の変更後は、次の基線チェックを使います。
+
+```bash
+npm run build
+cd src-tauri && cargo test
+cd src-tauri && cargo clippy --all-targets -- -D warnings
+cd test-api && cargo test
+cd test-api && cargo clippy --all-targets -- -D warnings
+```
+
+フロントエンドからの Tauri API アクセスは集中化されている必要があります。
+
+```bash
+rg -n "\binvoke\b|\blisten\b|@tauri-apps" src --glob '*.ts'
+```
+
+厳密な期待結果は、`src/app/backend/gateway.ts` だけが一致することです。
+
+## パス規則
+
+バックエンドパスは Tauri app config/data ディレクトリから注入されます。主要データベースは注入された app data ディレクトリ配下に置かれます。
+
+- `mvsep.db`
+- `user_config.db`
+- `tasks.db`
+
+アップロード元ファイルのパスは、ユーザーが選択したローカルファイルパスを保持します。ダウンロード出力ディレクトリには絶対パスを指定できます。`./output` のような相対出力パスは、注入された app data ディレクトリ配下に解決されます。旧バックエンドの実行ファイル位置、リポジトリルート、現在の cwd には解決されません。
+
+ダウンロード済み成果物のローカルパス記録は、新バックエンドのタスク/履歴データに保存されます。フロントエンドは旧 localStorage からダウンロードパスを再推測せず、これらのバックエンド記録を読み取って表示するべきです。
+
+## ドキュメント入口
+
+- `docs/INDEX.md`: エージェントとメンテナー向けの主入口。
+- `docs/mission.md`: 目標、非目標、リライト戦略。
+- `docs/architecture/backend-rewrite.md`: 採用済みのバックエンドリライトアーキテクチャ。
+- `manifest/rewrite-status.yaml`: バッチ状態とレビューゲート。
+- `CONTEXT.md`: プロジェクト用語集。
+- `Note.md`: 人間向け作業メモと長期的な方針。
+- `RESOURCES.md`: 高信頼資料と借用境界。
+- `rewrite-records/`: 非自明な移行判断と知見。
+- `reviews/`: 振る舞い、トレース、非同期、スタイル、データ、UX のレビュー報告。
+
+## 生成ファイル
+
+`dist/`、`node_modules/`、Vite キャッシュはローカル生成物であり、ソース管理の対象ではありません。必要に応じて `package-lock.json` とソースツリーから再生成します。
+
+## ライセンス
+
+Apache License 2.0

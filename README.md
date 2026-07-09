@@ -1,10 +1,16 @@
 # mvsep-rs
 
 <p align="center">
-  <img src="docs/assets/rust-mascot.svg" alt="Rust crab mascot icon for mvsep-rs" width="96">
+  <a href="https://www.rustacean.net/">
+    <img src="https://www.rustacean.net/assets/rustacean-orig-noshadow.svg" alt="Ferris Rust mascot from rustacean.net" width="96">
+  </a>
 </p>
 
-语言: [中文](README.md) | [English](README.en.md)
+<p align="center">
+  Ferris 图片: <a href="https://www.rustacean.net/">rustacean.net</a>
+</p>
+
+语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 mvsep-rs 是面向 MVSep 音频分离流程的 Tauri 2 桌面客户端和 Rust 后端重写工程。仓库同时包含桌面 UI、Tauri command facade，以及从 `test-api` 抽取并稳定下来的 Rust API/后端能力：配置、算法缓存、上传下载、任务持久化和下载状态。
 

@@ -1,10 +1,16 @@
 # mvsep-rs
 
 <p align="center">
-  <img src="docs/assets/rust-mascot.svg" alt="Rust crab mascot icon for mvsep-rs" width="96">
+  <a href="https://www.rustacean.net/">
+    <img src="https://www.rustacean.net/assets/rustacean-orig-noshadow.svg" alt="Ferris Rust mascot from rustacean.net" width="96">
+  </a>
 </p>
 
-Languages: [中文](README.md) | [English](README.en.md)
+<p align="center">
+  Ferris image: <a href="https://www.rustacean.net/">rustacean.net</a>
+</p>
+
+Languages: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 mvsep-rs is a Tauri 2 desktop client and Rust backend rewrite for MVSep audio separation workflows. The repository contains the desktop UI, the Tauri command facade, and the extracted Rust API/backend layer from `test-api`: config, algorithm cache, upload and download transfer, task persistence, and download state.
 
