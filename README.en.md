@@ -10,6 +10,11 @@
   Ferris image: <a href="https://www.rustacean.net/">rustacean.net</a>
 </p>
 
+[![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
+[![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
+
 Languages: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 Version 1.2 of mvsep-rs refactors the MVSep backend and updates the Tauri side as well. The repository contains the desktop UI, the Tauri command facade, and the extracted Rust API/backend layer from `test-api`: config, algorithm cache, upload and download transfer, task persistence, and download state.
@@ -40,9 +45,65 @@ The current rewrite policy is backend-first: for domains already migrated to the
 └── scripts/                   # Build scripts
 ```
 
-## Quick Start
+## Installation
 
-Install JavaScript and Rust dependencies, then run the frontend or Tauri app:
+### Arch Linux / Manjaro (AUR)
+
+```bash
+# Prebuilt binary version (recommended, fast installation)
+paru -S mvsep-gui-bin
+# or
+yay -S mvsep-gui-bin
+
+# Source build version (requires Rust and Node.js)
+paru -S mvsep-gui
+# or
+yay -S mvsep-gui
+```
+
+### Download from GitHub Release
+
+```bash
+# Linux
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/mvsep-gui
+chmod +x mvsep-gui
+sudo mv mvsep-gui /usr/bin/
+
+# Windows
+# Download MVSEP_1.2.0_x64-setup.exe and run the installer
+
+# Debian/Ubuntu
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
+sudo dpkg -i MVSEP_1.2.0_amd64.deb
+
+# Fedora/RHEL
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
+```
+
+### Build from Source
+
+```bash
+# Install dependencies
+sudo pacman -S webkit2gtk libappindicator-gtk3 librsvg libvips npm nodejs
+
+# Clone repository
+git clone https://github.com/AntheaLaffy/mvsep-rs.git
+cd mvsep-rs
+
+# Build frontend
+npm install
+npm run build
+
+# Build backend
+cd src-tauri
+cargo build --release
+
+# Run
+./target/release/mvsep-gui
+```
+
+### Quick Start
 
 ```bash
 npm install

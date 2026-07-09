@@ -10,6 +10,11 @@
   Ferris 画像: <a href="https://www.rustacean.net/">rustacean.net</a>
 </p>
 
+[![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
+[![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
+[![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
+
 言語: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 mvsep-rs は 1.2 版で MVSep バックエンドをリファクタリングし、Tauri 部分も更新しました。このリポジトリには、デスクトップ UI、Tauri command facade、そして `test-api` から抽出して安定化した Rust API/バックエンド機能が含まれます。対象は設定、アルゴリズムキャッシュ、アップロード/ダウンロード転送、タスク永続化、ダウンロード状態です。
@@ -40,7 +45,65 @@ mvsep-rs は 1.2 版で MVSep バックエンドをリファクタリングし�
 └── scripts/                   # ビルドスクリプト
 ```
 
-## クイックスタート
+## インストール
+
+### Arch Linux / Manjaro (AUR)
+
+```bash
+# プリビルドバイナリ版（推奨、高速インストール）
+paru -S mvsep-gui-bin
+# または
+yay -S mvsep-gui-bin
+
+# ソースビルド版（Rust と Node.js が必要）
+paru -S mvsep-gui
+# または
+yay -S mvsep-gui
+```
+
+### GitHub Release からダウンロード
+
+```bash
+# Linux
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/mvsep-gui
+chmod +x mvsep-gui
+sudo mv mvsep-gui /usr/bin/
+
+# Windows
+# MVSEP_1.2.0_x64-setup.exe をダウンロードしてインストーラーを実行します
+
+# Debian/Ubuntu
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
+sudo dpkg -i MVSEP_1.2.0_amd64.deb
+
+# Fedora/RHEL
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
+```
+
+### ソースからビルド
+
+```bash
+# 依存関係をインストール
+sudo pacman -S webkit2gtk libappindicator-gtk3 librsvg libvips npm nodejs
+
+# リポジトリをクローン
+git clone https://github.com/AntheaLaffy/mvsep-rs.git
+cd mvsep-rs
+
+# フロントエンドをビルド
+npm install
+npm run build
+
+# バックエンドをビルド
+cd src-tauri
+cargo build --release
+
+# 実行
+./target/release/mvsep-gui
+```
+
+### クイックスタート
 
 JavaScript と Rust の依存関係をインストールしてから、フロントエンドまたは Tauri アプリを起動します。
 
