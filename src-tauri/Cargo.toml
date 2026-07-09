@@ -1,6 +1,6 @@
 [package]
 name = "mvsep-gui"
-version = "1.2.0"
+version = "1.2.1"
 description = "MVSEP GUI - Music separation desktop application"
 license = "Apache-2.0"
 readme = "../README.md"
