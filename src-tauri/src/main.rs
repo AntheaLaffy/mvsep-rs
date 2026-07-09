@@ -13,6 +13,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
+mod web_db;
 
 // ============== 配置相关 ==============
 
@@ -142,6 +143,7 @@ pub struct BackendPaths {
     pub mvsep_db_path: PathBuf,
     pub user_config_db_path: PathBuf,
     pub tasks_db_path: PathBuf,
+    pub web_db_path: PathBuf,
 }
 
 impl BackendPaths {
@@ -154,6 +156,7 @@ impl BackendPaths {
             mvsep_db_path: app_data_dir.join("mvsep.db"),
             user_config_db_path: app_data_dir.join("user_config.db"),
             tasks_db_path: app_data_dir.join("tasks.db"),
+            web_db_path: app_data_dir.join("web.db"),
             app_config_dir,
             app_data_dir,
             legacy_config_json_path,
@@ -2303,6 +2306,48 @@ fn frontend_debug_log(state: State<'_, AppState>, level: String, message: String
     app.backend.frontend_debug_log(app, level, message);
 }
 
+#[tauri::command]
+fn web_storage_get(state: State<'_, AppState>, key: String) -> Result<Option<String>, String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.get_string(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn web_storage_set(state: State<'_, AppState>, key: String, value: String) -> Result<(), String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.set_string(&key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn web_storage_delete(state: State<'_, AppState>, key: String) -> Result<bool, String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.delete(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn web_storage_exists(state: State<'_, AppState>, key: String) -> Result<bool, String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.exists(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn web_storage_get_all(state: State<'_, AppState>) -> Result<Vec<web_db::WebConfigEntry>, String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.get_all().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn web_storage_clear_all(state: State<'_, AppState>) -> Result<u64, String> {
+    let paths = &state.inner().paths;
+    let db = web_db::open_web_database(&paths.web_db_path).map_err(|e| e.to_string())?;
+    db.clear_all().map_err(|e| e.to_string())
+}
+
 fn legacy_resolve_path(state: &AppState, path: String) -> Result<String, String> {
     let absolute = resolve_backend_path(&state.paths, PathBuf::from(path));
     Ok(absolute.to_string_lossy().to_string())
@@ -3421,6 +3466,12 @@ fn main() {
             complete_task,
             get_backend_logs,
             frontend_debug_log,
+            web_storage_get,
+            web_storage_set,
+            web_storage_delete,
+            web_storage_exists,
+            web_storage_get_all,
+            web_storage_clear_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

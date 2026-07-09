@@ -32,6 +32,11 @@ dirs = "5"
 futures-util = "0.3"
 tokio-util = "0.7"
 mvsep-api-tester = "0.1.0"
+rusqlite = "0.31"
+anyhow = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ashpd = "0.12.1"
+
+[dev-dependencies]
+tempfile = "3"

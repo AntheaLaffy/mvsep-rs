@@ -2,6 +2,7 @@ import { getThemeList, loadTheme } from './themes';
 import { t, initLocale, getLocale, getAvailableLocales } from './i18n';
 import { backendGateway } from './app/backend/gateway';
 import { readJsonStorage, readTextStorage, writeJsonStorage, writeTextStorage } from './app/storage';
+import { setLogSender } from './app/utils/logger';
 import { filterLogs, renderLogsPageHtml, type LogEntry } from './app/render/logs';
 import { renderAboutPageHtml } from './app/render/about';
 import {
@@ -198,13 +199,14 @@ class App {
   };
 
   constructor() {
-    this.init();
+    void this.init();
   }
 
   async init() {
-    initLocale();
-    loadTheme();
-    this.applySavedCustomThemeIfSelected();
+    setLogSender((level, message) => this.sendDebugLog(level, message));
+    await initLocale();
+    await loadTheme();
+    await this.applySavedCustomThemeIfSelected();
     this.initializeCustomThemeDraft();
     await this.loadConfig();
     this.algorithmSearchResults = this.algorithms;
@@ -214,7 +216,7 @@ class App {
     this.initFrontendLogs();
     await this.loadTaskHistory();
     await this.loadActiveTasks();
-    this.loadPresets();
+    await this.loadPresets();
     this.startBackendLogPolling();
     this.setupFrontendDebugHooks();
     this.render();
@@ -385,17 +387,17 @@ class App {
     return token.length > 0 && !this.isPlaceholderToken(token);
   }
 
-  private syncApiKeyGuideVisibility() {
+  private async syncApiKeyGuideVisibility() {
     if (this.hasUsableApiToken()) {
       this.showApiKeyGuide = false;
       return;
     }
-    this.showApiKeyGuide = readTextStorage(this.apiKeyGuideDismissStorageKey) !== '1';
+    this.showApiKeyGuide = await readTextStorage(this.apiKeyGuideDismissStorageKey) !== '1';
   }
 
-  dismissApiKeyGuide() {
+  async dismissApiKeyGuide() {
     this.showApiKeyGuide = false;
-    const ok = writeTextStorage(this.apiKeyGuideDismissStorageKey, '1');
+    const ok = await writeTextStorage(this.apiKeyGuideDismissStorageKey, '1');
     if (!ok) console.error('Failed to persist API key guide dismissal');
     this.render();
   }
@@ -509,7 +511,7 @@ class App {
       }
       return;
     }
-    this.syncApiKeyGuideVisibility();
+    await this.syncApiKeyGuideVisibility();
     this.render();
   }
 
@@ -721,13 +723,13 @@ class App {
     return 'mvsep_presets_v1';
   }
 
-  loadPresets() {
-    this.presets = readJsonStorage<Preset[]>(this.getPresetStorageKey(), []);
+  async loadPresets() {
+    this.presets = await readJsonStorage<Preset[]>(this.getPresetStorageKey(), []);
     this.selectedHomePresetId = this.presets[0]?.id || '';
   }
 
-  savePresets() {
-    const ok = writeJsonStorage(this.getPresetStorageKey(), this.presets);
+  async savePresets() {
+    const ok = await writeJsonStorage(this.getPresetStorageKey(), this.presets);
     if (!ok) {
       console.error('Failed to save presets');
     }
@@ -932,20 +934,21 @@ class App {
 
   async loadActiveTasks() {
     try {
-      const localTasks = readJsonStorage<Task[]>(this.getActiveTasksStorageKey(), []);
+      const localTasks = await readJsonStorage<Task[]>(this.getActiveTasksStorageKey(), []);
       let parsed = localTasks;
       try {
         const backendTasks = await backendGateway.getTasks();
         this.activeTasksLoadedFromFallback = false;
+        const migrationKey = await readTextStorage(this.getActiveTasksMigrationKey());
         const shouldImportLocal =
           backendTasks.length === 0
           && localTasks.length > 0
-          && readTextStorage(this.getActiveTasksMigrationKey()) !== '1';
+          && migrationKey !== '1';
         parsed = this.mergeActiveTasks(backendTasks, localTasks, shouldImportLocal);
         if (shouldImportLocal) {
           await this.enqueueActiveTasksBackendSave(parsed);
         }
-        writeTextStorage(this.getActiveTasksMigrationKey(), '1');
+        await writeTextStorage(this.getActiveTasksMigrationKey(), '1');
       } catch (e) {
         console.error('Failed to load active tasks from backend store:', e);
         this.activeTasksLoadedFromFallback = true;
@@ -954,7 +957,7 @@ class App {
       for (const task of this.tasks) {
         task.phase = this.getPhaseFromStatus(task.status);
       }
-      writeJsonStorage(this.getActiveTasksStorageKey(), this.tasks);
+      await writeJsonStorage(this.getActiveTasksStorageKey(), this.tasks);
       for (const task of this.tasks) {
         this.startPolling(task.hash);
         void this.pollTaskStatus(task.hash);
@@ -983,7 +986,7 @@ class App {
     }
 
     const activeTasks = this.tasks.filter(t => this.isActiveTask(t));
-    const ok = writeJsonStorage(this.getActiveTasksStorageKey(), activeTasks);
+    const ok = await writeJsonStorage(this.getActiveTasksStorageKey(), activeTasks);
     if (!ok) {
       console.error('Failed to save active tasks');
     }
@@ -994,20 +997,21 @@ class App {
   }
 
   async loadTaskHistory() {
-    const localHistory = readJsonStorage<TaskHistoryRecord[]>(this.getTaskHistoryStorageKey(), []);
+    const localHistory = await readJsonStorage<TaskHistoryRecord[]>(this.getTaskHistoryStorageKey(), []);
     try {
       const backendHistory = await backendGateway.getTaskHistory();
       this.taskHistoryLoadedFromFallback = false;
+      const migrationKey = await readTextStorage(this.getTaskHistoryMigrationKey());
       const shouldImportLocal =
         backendHistory.length === 0
         && localHistory.length > 0
-        && readTextStorage(this.getTaskHistoryMigrationKey()) !== '1';
+        && migrationKey !== '1';
       this.taskHistory = this.mergeTaskHistory(backendHistory, localHistory, shouldImportLocal);
       if (shouldImportLocal) {
         await this.enqueueTaskHistoryBackendSave(this.taskHistory);
       }
-      writeTextStorage(this.getTaskHistoryMigrationKey(), '1');
-      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+      await writeTextStorage(this.getTaskHistoryMigrationKey(), '1');
+      await writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
     } catch (e) {
       console.error('Failed to load task history from backend store:', e);
       this.taskHistoryLoadedFromFallback = true;
@@ -1018,7 +1022,7 @@ class App {
   async saveTaskHistory(): Promise<void> {
     // Keep only last 100 records
     this.taskHistory = this.normalizeTaskHistory(this.taskHistory);
-    const ok = writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+    const ok = await writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
     if (!ok) {
       console.error('Failed to save task history');
     }
@@ -1058,7 +1062,7 @@ class App {
     nextHistory.unshift(record);
     await this.enqueueTaskCompletionBackendSave(task, record);
     this.taskHistory = this.normalizeTaskHistory(nextHistory);
-    const ok = writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+    const ok = await writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
     if (!ok) {
       console.error('Failed to save task history');
     }
@@ -1071,7 +1075,7 @@ class App {
       await this.saveTaskHistory();
     } catch (e) {
       this.taskHistory = previous;
-      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+      await writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
       throw e;
     }
   }
@@ -1083,7 +1087,7 @@ class App {
       await this.saveTaskHistory();
     } catch (e) {
       this.taskHistory = previous;
-      writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
+      await writeJsonStorage(this.getTaskHistoryStorageKey(), this.taskHistory);
       throw e;
     }
   }
@@ -1114,10 +1118,10 @@ class App {
     };
   }
 
-  applySavedCustomThemeIfSelected() {
-    const selected = readTextStorage('theme');
+  async applySavedCustomThemeIfSelected() {
+    const selected = document.documentElement.getAttribute('data-theme');
     if (selected !== 'custom') return;
-    const custom = readJsonStorage<{ primary: string; bgPrimary: string; textPrimary: string } | null>(
+    const custom = await readJsonStorage<{ primary: string; bgPrimary: string; textPrimary: string } | null>(
       'mvsep_custom_theme',
       null,
     );
@@ -1270,7 +1274,7 @@ class App {
       };
       this.selectedFormat = 1;
     }
-    this.syncApiKeyGuideVisibility();
+    await this.syncApiKeyGuideVisibility();
   }
 
   async loadAlgorithmCachePath() {
@@ -1952,7 +1956,7 @@ class App {
     }
   }
 
-  saveCustomTheme() {
+  async saveCustomTheme() {
     if (!this.customThemeDraft) return;
     const draft = this.normalizeThemeDraft(this.customThemeDraft);
     this.customThemeDraft = draft;
@@ -1962,8 +1966,8 @@ class App {
     document.documentElement.style.setProperty('--color-bg-primary', draft.bgPrimary);
     document.documentElement.style.setProperty('--color-text-primary', draft.textPrimary);
     document.documentElement.setAttribute('data-theme', 'custom');
-    const themeSaved = writeTextStorage('theme', 'custom');
-    const customSaved = writeJsonStorage('mvsep_custom_theme', draft);
+    const themeSaved = await writeTextStorage('theme', 'custom');
+    const customSaved = await writeJsonStorage('mvsep_custom_theme', draft);
     if (!themeSaved || !customSaved) {
       console.error('Failed to persist custom theme');
     }
@@ -2067,7 +2071,7 @@ class App {
           algorithmAutoRefreshDaysInput.value = String(nextConfig.algorithm_auto_refresh_days ?? this.defaultAlgorithmAutoRefreshDays);
           await this.saveConfig(nextConfig);
           await this.loadFormats();
-          this.syncApiKeyGuideVisibility();
+          await this.syncApiKeyGuideVisibility();
         },
       );
       this.showTransientNotice(t('settings.saved'), 'info', 2200);

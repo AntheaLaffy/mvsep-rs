@@ -27,9 +27,11 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
     if (themeId) {
       const theme = getThemeList().find(item => item.id === themeId);
       if (theme) {
-        applyTheme(theme);
-        app.initializeCustomThemeDraft();
-        app.render();
+        void (async () => {
+          await applyTheme(theme);
+          app.initializeCustomThemeDraft();
+          app.render();
+        })();
       }
     }
   }
@@ -38,8 +40,10 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
     const localeEl = target.closest('[data-locale]') as HTMLElement;
     const locale = localeEl?.dataset.locale as Locale | undefined;
     if (locale) {
-      setLocale(locale);
-      app.render();
+      void (async () => {
+        await setLocale(locale);
+        app.render();
+      })();
     }
   }
 
@@ -305,8 +309,10 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
       return;
     }
     void app.sendDebugLog('INFO', `locale change requested: ${target.value}`);
-    setLocale(target.value as Locale);
-    app.render();
+    void (async () => {
+      await setLocale(target.value as Locale);
+      app.render();
+    })();
   }
 
   if (target.id === 'algorithm-select') {
