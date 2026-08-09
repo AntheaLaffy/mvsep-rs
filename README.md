@@ -1,3 +1,5 @@
+
+
 # MVSEP - 音乐分离工具
 
 MVSEP 桌面客户端，用于将音乐分离为人声、伴奏、鼓点、贝斯等音轨。支持拖拽上传、一键运行、任务管理、断点续传等功能。
@@ -42,7 +44,7 @@ yay -S mvsep-gui
 
 ### Windows
 
-下载 `MVSEP_1.2.0_x64-setup.exe`，运行安装程序即可。
+下载 [MVSEP_1.2.0_x64-setup.exe](https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_x64-setup.exe)，运行安装程序即可。
 
 ### Debian/Ubuntu
 
