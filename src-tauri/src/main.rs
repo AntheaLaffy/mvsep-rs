@@ -777,6 +777,7 @@ fn algorithm_cache_rows_from_values(
     let mut groups = BTreeMap::<i32, String>::new();
     let mut algorithm_rows = Vec::new();
     let mut field_rows = Vec::new();
+    let mut next_field_id: i64 = 1;
 
     for algo in algorithms {
         let algo_id = read_i32(algo.get("render_id")).unwrap_or(0);
@@ -805,22 +806,24 @@ fn algorithm_cache_rows_from_values(
 
         if let Some(fields) = algo.get("algorithm_fields").and_then(|f| f.as_array()) {
             for field in fields {
-                let field_id = read_i32(field.get("id")).unwrap_or(0);
                 let field_name = field
                     .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                if !matches!(field_name.as_str(), "add_opt1" | "add_opt2" | "add_opt3") {
+                    continue;
+                }
                 let field_text = field
                     .get("text")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                let field_options = field
-                    .get("options")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("{}")
-                    .to_string();
+                let field_options = match field.get("options") {
+                    Some(serde_json::Value::String(value)) => value.clone(),
+                    Some(value @ serde_json::Value::Object(_)) => value.to_string(),
+                    _ => "{}".to_string(),
+                };
                 let field_default = field
                     .get("default_key")
                     .and_then(|v| v.as_str())
@@ -828,13 +831,16 @@ fn algorithm_cache_rows_from_values(
                     .to_string();
 
                 field_rows.push(repositories::AlgorithmFieldRow {
-                    id: field_id as i64,
+                    // The upstream field id is only scoped to an algorithm, while the
+                    // local schema uses a global primary key. Allocate a cache-local id.
+                    id: next_field_id,
                     algorithm_id: algo_id,
                     name: field_name,
                     text: Some(field_text),
                     options: Some(field_options),
                     default_key: Some(field_default),
                 });
+                next_field_id += 1;
             }
         }
     }

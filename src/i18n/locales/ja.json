@@ -38,7 +38,9 @@
     "apiKeyGuideTitle": "初回利用前に API Key を設定してください",
     "apiKeyGuideDesc": "有効な API Key がないとタスク作成は失敗します。先に Settings で API Key を入力し、接続テストを実行してください。",
     "apiKeyGuideAction": "設定へ移動",
-    "apiKeyGuideDismiss": "あとで"
+    "apiKeyGuideDismiss": "あとで",
+    "dropPathUnavailable": "ドロップしたファイルのローカルパスを取得できません。ファイル選択を使用してください。",
+    "unsupportedAudioFile": "未対応のファイル形式です。WAV、MP3、FLAC、OGG、M4A、AAC を選択してください。"
   },
   "task": {
     "current": "現在のタスク",
@@ -132,7 +134,21 @@
     "version": "バージョン",
     "builtWith": "ビルド",
     "docs": "ドキュメント",
-    "info": "情報"
+    "info": "情報",
+    "checkUpdates": "更新を確認",
+    "checkingUpdates": "確認中...",
+    "upToDate": "最新バージョンを使用しています。",
+    "updateAvailable": "新しいバージョンがあります：",
+    "updateCheckFailed": "更新の確認に失敗しました。後でもう一度お試しください。",
+    "downloadUpdate": "更新をダウンロード",
+    "ignoreThisVersion": "このバージョンをスキップ",
+    "restoreUpdateNotifications": "このバージョンの通知を復元",
+    "versionIgnored": "このバージョンをスキップしました。以降の新しいバージョンは通知されます。",
+    "versionNotificationsRestored": "このバージョンの更新通知を復元しました。",
+    "ignoreUpdateFailed": "更新通知設定の保存に失敗しました。",
+    "support": "サポートとフィードバック",
+    "feedback": "フィードバックを送信",
+    "description": "MVSEP API を利用した音声分離デスクトップクライアントです。複数アルゴリズム、タスク管理、結果ダウンロードに対応しています。"
   },
   "algorithm": {
     "search": "アルゴリズム検索",

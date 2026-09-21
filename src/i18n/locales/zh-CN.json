@@ -38,7 +38,9 @@
     "apiKeyGuideTitle": "首次使用请先配置 API Key",
     "apiKeyGuideDesc": "未配置有效 API Key 时，任务创建会失败。请先前往设置页面填写 API Key 并测试连接。",
     "apiKeyGuideAction": "前往设置",
-    "apiKeyGuideDismiss": "稍后再说"
+    "apiKeyGuideDismiss": "稍后再说",
+    "dropPathUnavailable": "无法读取拖入文件的本地路径，请使用文件选择器。",
+    "unsupportedAudioFile": "不支持该文件类型，请选择 WAV、MP3、FLAC、OGG、M4A 或 AAC。"
   },
   "task": {
     "current": "当前任务",
@@ -137,7 +139,21 @@
     "version": "版本",
     "builtWith": "构建",
     "docs": "使用文档",
-    "info": "信息"
+    "info": "信息",
+    "checkUpdates": "检查更新",
+    "checkingUpdates": "正在检查...",
+    "upToDate": "当前已是最新版本。",
+    "updateAvailable": "发现新版本：",
+    "updateCheckFailed": "检查更新失败，请稍后重试。",
+    "downloadUpdate": "前往下载更新",
+    "ignoreThisVersion": "忽略此版本",
+    "restoreUpdateNotifications": "恢复此版本提醒",
+    "versionIgnored": "已忽略此版本，后续新版本仍会提醒。",
+    "versionNotificationsRestored": "已恢复此版本的更新提醒。",
+    "ignoreUpdateFailed": "保存更新提醒设置失败。",
+    "support": "支持与反馈",
+    "feedback": "提交反馈",
+    "description": "MVSEP 桌面客户端，通过 MVSEP API 完成音频分离，支持多种算法、任务管理和结果下载。"
   },
   "algorithm": {
     "search": "搜索算法",

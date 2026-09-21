@@ -49,6 +49,7 @@ import type {
 
 type UiActionStatusPhase = 'running' | 'success' | 'error';
 type PageId = 'home' | 'tasks' | 'algorithms' | 'settings' | 'appearance' | 'logs' | 'about';
+type UpdateCheckStatus = 'idle' | 'checking' | 'current' | 'available' | 'error';
 
 interface UiStatusBanner {
   phase: UiActionStatusPhase;
@@ -68,6 +69,7 @@ class App {
   private readonly defaultAlgorithmAutoRefreshDays = 15;
   private readonly settingsAutoSaveDebounceMs = 700;
   private readonly apiKeyGuideDismissStorageKey = 'mvsep_api_key_guide_dismissed_v1';
+  private readonly ignoredUpdateVersionStorageKey = 'mvsep_ignored_update_version_v1';
   private currentPage: PageId = 'home';
   private config: Config | null = null;
   private tasks: Task[] = [];
@@ -156,6 +158,12 @@ class App {
   private lastAutoSaveErrorAt: number = 0;
   private readonly minPollIntervalSeconds: number = 1;
   private readonly maxPollIntervalSeconds: number = 60;
+  private appVersion: string = '1.2.2';
+  private updateCheckStatus: UpdateCheckStatus = 'idle';
+  private latestVersion: string | null = null;
+  private latestReleaseUrl: string = 'https://github.com/AntheaLaffy/mvsep-rs/releases/latest';
+  private algorithmSelectionRequestId: number = 0;
+  private ignoredUpdateVersion: string | null = null;
   private readonly pageRegistry: Record<PageId, PageDefinition> = {
     home: {
       id: 'home',
@@ -207,8 +215,10 @@ class App {
     await this.applySavedCustomThemeIfSelected();
     this.initializeCustomThemeDraft();
     await this.loadConfig();
+    this.ignoredUpdateVersion = await readTextStorage(this.ignoredUpdateVersionStorageKey);
     this.algorithmSearchResults = this.algorithms;
     this.setupEventListeners();
+    this.setupFileDragDropListener();
     this.setupDownloadProgressListener();
     this.setupUploadProgressListener();
     this.initFrontendLogs();
@@ -219,6 +229,11 @@ class App {
     this.setupFrontendDebugHooks();
     this.render();
 
+    void backendGateway.getAppVersion().then((version) => {
+      this.appVersion = version;
+      if (this.currentPage === 'about') this.render();
+      return this.checkForUpdates(true);
+    }).catch(() => undefined);
     void this.loadInitialData();
   }
 
@@ -1483,6 +1498,19 @@ class App {
     }
   }
 
+  async selectAlgorithm(algorithmId: number): Promise<void> {
+    if (!Number.isFinite(algorithmId) || algorithmId <= 0) return;
+
+    const requestId = ++this.algorithmSelectionRequestId;
+    this.selectedAlgorithm = algorithmId;
+    this.selectedAlgorithmOptions.clear();
+    this.render();
+
+    await this.loadAlgorithmDetails(algorithmId);
+    if (requestId !== this.algorithmSelectionRequestId || this.selectedAlgorithm !== algorithmId) return;
+    this.render();
+  }
+
   onAlgorithmSearchInput(query: string) {
     this.algorithmSearchQuery = query;
 
@@ -1507,6 +1535,24 @@ class App {
     document.addEventListener('dragover', (e) => handleDocumentDragOver(domCtx, e));
     document.addEventListener('dragleave', (e) => handleDocumentDragLeave(domCtx, e));
     document.addEventListener('drop', (e) => handleDocumentDrop(domCtx, e));
+  }
+
+  setupFileDragDropListener() {
+    void backendGateway.onFileDragDrop((event) => {
+      const dropzone = document.getElementById('dropzone');
+      if (event.type === 'enter' || event.type === 'over') {
+        dropzone?.classList.add('active');
+        return;
+      }
+
+      dropzone?.classList.remove('active');
+      if (event.type === 'drop' && event.paths.length > 0) {
+        this.handleDroppedPath(event.paths[0]);
+      }
+    }).catch((e) => {
+      console.error('Failed to register native file drag-and-drop listener:', e);
+      void this.sendDebugLog('ERROR', `file drag-and-drop listener registration failed: ${String(e)}`);
+    });
   }
 
   navigate(page: string) {
@@ -1539,7 +1585,21 @@ class App {
 
   handleFileDrop(file: File) {
     const pseudoPath = (file as File & { path?: string }).path;
-    this.selectedFile = pseudoPath || file.name;
+    if (pseudoPath) this.handleDroppedPath(pseudoPath);
+    else {
+      this.showTransientNotice(t('home.dropPathUnavailable'), 'warn', 3600);
+      void this.sendDebugLog('WARN', `HTML file drop did not expose a filesystem path: ${file.name}`);
+    }
+  }
+
+  handleDroppedPath(path: string) {
+    const extension = path.split('.').pop()?.toLowerCase() || '';
+    if (!['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac'].includes(extension)) {
+      this.showTransientNotice(t('home.unsupportedAudioFile'), 'warn', 3200);
+      return;
+    }
+    this.selectedFile = path;
+    void this.sendDebugLog('INFO', `audio file selected by drag-and-drop: ${path.split(/[/\\]/).pop() || 'audio'}`);
     this.render();
   }
 
@@ -2741,8 +2801,78 @@ class App {
     });
   }
 
+  async checkForUpdates(isAutomatic = false) {
+    if (this.updateCheckStatus === 'checking') return;
+    this.updateCheckStatus = 'checking';
+    this.render();
+
+    try {
+      const response = await fetch('https://api.github.com/repos/AntheaLaffy/mvsep-rs/releases/latest', {
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+      if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
+
+      const release = await response.json() as { tag_name?: string; html_url?: string };
+      const latestVersion = (release.tag_name || '').replace(/^v/i, '');
+      if (!latestVersion) throw new Error('Latest release has no version tag');
+
+      this.latestVersion = latestVersion;
+      this.latestReleaseUrl = release.html_url || this.latestReleaseUrl;
+      this.updateCheckStatus = this.compareVersions(latestVersion, this.appVersion) > 0
+        ? 'available'
+        : 'current';
+      if (
+        this.updateCheckStatus === 'available'
+        && isAutomatic
+        && latestVersion !== this.ignoredUpdateVersion
+      ) {
+        this.showTransientNotice(`${t('about.updateAvailable')} v${latestVersion}`, 'info', 6000);
+      }
+      void this.sendDebugLog('INFO', `update check completed: current=${this.appVersion}, latest=${latestVersion}`);
+    } catch (e) {
+      this.updateCheckStatus = 'error';
+      void this.sendDebugLog('ERROR', `update check failed: ${String(e)}`);
+    }
+    this.render();
+  }
+
+  async toggleIgnoreLatestUpdate() {
+    if (!this.latestVersion) return;
+    const shouldIgnore = this.ignoredUpdateVersion !== this.latestVersion;
+    const value = shouldIgnore ? this.latestVersion : '';
+    const saved = await writeTextStorage(this.ignoredUpdateVersionStorageKey, value);
+    if (!saved) {
+      this.showTransientNotice(t('about.ignoreUpdateFailed'), 'warn', 3200);
+      return;
+    }
+    this.ignoredUpdateVersion = shouldIgnore ? this.latestVersion : null;
+    this.showTransientNotice(
+      shouldIgnore ? t('about.versionIgnored') : t('about.versionNotificationsRestored'),
+      'info',
+      2600,
+    );
+    this.render();
+  }
+
+  private compareVersions(left: string, right: string): number {
+    const parse = (value: string) => value.split(/[.+-]/).slice(0, 3).map(part => Number.parseInt(part, 10) || 0);
+    const leftParts = parse(left);
+    const rightParts = parse(right);
+    for (let index = 0; index < 3; index += 1) {
+      if (leftParts[index] !== rightParts[index]) return leftParts[index] > rightParts[index] ? 1 : -1;
+    }
+    return 0;
+  }
+
   renderAboutPage() {
-    return renderAboutPageHtml(t);
+    return renderAboutPageHtml({
+      appVersion: this.appVersion,
+      updateCheckStatus: this.updateCheckStatus,
+      latestVersion: this.latestVersion,
+      latestReleaseUrl: this.latestReleaseUrl,
+      isLatestVersionIgnored: this.latestVersion !== null && this.latestVersion === this.ignoredUpdateVersion,
+      t,
+    });
   }
 }
 

@@ -38,7 +38,9 @@
     "apiKeyGuideTitle": "Set your API Key before first use",
     "apiKeyGuideDesc": "Task creation will fail without a valid API Key. Go to Settings, fill your API Key, and run Test Connection first.",
     "apiKeyGuideAction": "Go to Settings",
-    "apiKeyGuideDismiss": "Later"
+    "apiKeyGuideDismiss": "Later",
+    "dropPathUnavailable": "The local path of the dropped file is unavailable. Use the file picker instead.",
+    "unsupportedAudioFile": "Unsupported file type. Choose a WAV, MP3, FLAC, OGG, M4A, or AAC file."
   },
   "task": {
     "current": "Current Tasks",
@@ -137,7 +139,21 @@
     "version": "Version",
     "builtWith": "Built with",
     "docs": "Documentation",
-    "info": "Information"
+    "info": "Information",
+    "checkUpdates": "Check for Updates",
+    "checkingUpdates": "Checking...",
+    "upToDate": "You are using the latest version.",
+    "updateAvailable": "A new version is available:",
+    "updateCheckFailed": "Update check failed. Try again later.",
+    "downloadUpdate": "Download Update",
+    "ignoreThisVersion": "Skip This Version",
+    "restoreUpdateNotifications": "Restore Version Alert",
+    "versionIgnored": "This version is skipped. Newer versions will still be announced.",
+    "versionNotificationsRestored": "Update alerts for this version are restored.",
+    "ignoreUpdateFailed": "Failed to save the update alert preference.",
+    "support": "Support and Feedback",
+    "feedback": "Send Feedback",
+    "description": "MVSEP desktop client for audio separation through the MVSEP API, with multiple algorithms, task management, and result downloads."
   },
   "algorithm": {
     "search": "Search Algorithms",

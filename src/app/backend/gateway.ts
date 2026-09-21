@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { getVersion } from '@tauri-apps/api/app';
+import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { openPath, revealItemInDir, openUrl as openExternalUrl } from '@tauri-apps/plugin-opener';
 import type {
@@ -27,6 +29,10 @@ type ApiAuthArgs = {
 };
 
 export const backendGateway = {
+  getAppVersion(): Promise<string> {
+    return getVersion();
+  },
+
   loadConfig(): Promise<Config> {
     return invoke<Config>('load_config');
   },
@@ -156,5 +162,9 @@ export const backendGateway = {
 
   onUploadProgress(handler: (payload: UploadProgressPayload) => void): Promise<Unlisten> {
     return listen<UploadProgressPayload>('upload-progress', (event) => handler(event.payload));
+  },
+
+  onFileDragDrop(handler: (event: DragDropEvent) => void): Promise<Unlisten> {
+    return getCurrentWebview().onDragDropEvent((event) => handler(event.payload));
   },
 };

@@ -49,6 +49,9 @@ export interface DomEventsContext {
   openOutput(path: string): Promise<boolean>;
   openHistoryOutput(id: string): Promise<boolean>;
   loadAlgorithmDetails(algorithmId: number): Promise<unknown>;
+  selectAlgorithm(algorithmId: number): Promise<void>;
+  checkForUpdates(isAutomatic?: boolean): Promise<void>;
+  toggleIgnoreLatestUpdate(): Promise<void>;
   refreshAlgorithmListFromLocal(options?: { render?: boolean; syncSearch?: boolean }): Promise<void>;
   fetchLatestAlgorithmInfo(): Promise<void>;
   createPresetFromCurrent(name: string): Preset;
@@ -61,6 +64,7 @@ export interface DomEventsContext {
   sendDebugLog(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string): Promise<void>;
   getApiUrlByMirror(mirror: string): string;
   handleFileDrop(file: File): void;
+  handleDroppedPath(path: string): void;
   scheduleSettingsAutoSave(): void;
   dismissApiKeyGuide(): void;
   goToApiKeySettings(): void;

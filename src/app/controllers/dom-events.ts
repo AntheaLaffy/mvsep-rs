@@ -145,10 +145,8 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
   if (target.closest('[data-action="use-algorithm"]')) {
     const idAttr = target.closest('[data-action="use-algorithm"]')?.getAttribute('data-id');
     if (idAttr) {
-      app.selectedAlgorithm = parseInt(idAttr, 10);
-      app.selectedAlgorithmOptions.clear();
       app.navigate('home');
-      void app.loadAlgorithmDetails(app.selectedAlgorithm).then(() => app.render());
+      void app.selectAlgorithm(parseInt(idAttr, 10));
     }
   }
 
@@ -158,6 +156,14 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
 
   if (target.closest('[data-action="fetch-latest-algo-info"]')) {
     void app.fetchLatestAlgorithmInfo();
+  }
+
+  if (target.closest('[data-action="check-for-updates"]')) {
+    void app.checkForUpdates();
+  }
+
+  if (target.closest('[data-action="toggle-ignore-update"]')) {
+    void app.toggleIgnoreLatestUpdate();
   }
 
   if (target.closest('[data-action="save-preset"]')) {
@@ -315,10 +321,7 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
 
   if (target.id === 'algorithm-select') {
     const value = parseInt(target.value, 10);
-    app.selectedAlgorithm = value;
-    app.selectedAlgorithmOptions.clear();
-    await app.loadAlgorithmDetails(value);
-    app.render();
+    await app.selectAlgorithm(value);
   }
 
   if (target.id.startsWith('algo-option-') && target.id.endsWith('-select')) {
