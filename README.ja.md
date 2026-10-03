@@ -7,7 +7,7 @@ MVSEP デスクトップクライアント。音楽をボーカル、伴奏、�
 [![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
 [![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
 
-言語: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+言語: [中文](README.zh-CN.md) | [English](README.md) | [日本語](README.ja.md)
 
 ## 機能
 

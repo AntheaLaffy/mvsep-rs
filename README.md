@@ -1,50 +1,50 @@
-# MVSEP - 音乐分离工具
+# MVSEP - Music Separation Tool
 
-MVSEP 桌面客户端，用于将音乐分离为人声、伴奏、鼓点、贝斯等音轨。支持拖拽上传、一键运行、任务管理、断点续传等功能。
+MVSEP desktop client for separating music into vocal, accompaniment, drums, bass and other tracks. Supports drag-and-drop upload, one-click operation, task management, and resumable downloads.
 
 [![License](https://img.shields.io/crates/l/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
 [![Crates.io](https://img.shields.io/crates/v/mvsep-api-tester.svg)](https://crates.io/crates/mvsep-api-tester)
 [![Crates.io](https://img.shields.io/crates/v/mvsep-gui.svg)](https://crates.io/crates/mvsep-gui)
 [![Docs](https://docs.rs/mvsep-api-tester/badge.svg)](https://docs.rs/mvsep-api-tester)
 
-语言: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
+Languages: [中文](README.zh-CN.md) | [English](README.md) | [日本語](README.ja.md)
 
-界面支持英文、中文和日文。首次启动按 `LC_ALL` → `LC_MESSAGES` → `LANG` 检测系统语言；均未设置时使用 WebView 语言。中文、日文环境显示对应翻译，其他环境（包括 `C` / `POSIX`）默认英文。设置中手动选择的语言优先于自动检测。
+The interface supports English, Chinese and Japanese. On first launch, the app follows the system locale (`LC_ALL`, then `LC_MESSAGES`, then `LANG`); if these are unset, it uses the WebView language. Chinese and Japanese locales select their respective translations; all other locales, including `C` and `POSIX`, default to English. A language selected in Settings takes precedence on subsequent launches.
 
-## 功能特点
+## Features
 
-### 用户功能
-- **拖拽上传** - 将音频文件拖入窗口即可开始处理
-- **一键运行** - 上传 → 等待分离完成 → 自动下载，全程无需手动操作
-- **任务管理** - 实时查看分离进度，支持中断、下载、删除任务
-- **多种算法** - 支持多种分离算法和模型可选
-- **断点续传** - 下载中断后再次点击即可继续，无需重新开始
-- **代理支持** - 支持系统代理、手动代理或无代理
+### User Features
+- **Drag and Drop** - Drag audio files into the window to start processing
+- **One-click Operation** - Upload → Wait for separation → Auto download, no manual steps required
+- **Task Management** - Real-time separation progress, support interrupt, download, delete tasks
+- **Multiple Algorithms** - Support multiple separation algorithms and models
+- **Resumable Downloads** - Click download again to resume from interruption
+- **Proxy Support** - System proxy, manual proxy, or no proxy modes
 
-### 技术特性
-- **三数据库架构**：算法缓存、任务追踪、用户配置独立管理
-- **流式上传**：基于 tokio 的异步文件上传，支持进度回调和取消
-- **任务持久化**：完整的任务生命周期管理和历史记录
+### Technical Features
+- **Three-database Architecture**: Algorithm cache, task tracking, user config independently managed
+- **Streaming Upload**: Async file upload based on tokio, with progress callback and cancellation
+- **Task Persistence**: Complete task lifecycle management and history records
 
-## 下载安装
+## Installation
 
 ### Arch Linux / Manjaro (AUR)
 
 ```bash
-# 预编译二进制版本（推荐，快速安装）
+# Prebuilt binary version (recommended, fast installation)
 paru -S mvsep-gui-bin
-# 或
+# or
 yay -S mvsep-gui-bin
 
-# 源码构建版本（需要 Rust 和 Node.js）
+# Source build version (requires Rust and Node.js)
 paru -S mvsep-gui
-# 或
+# or
 yay -S mvsep-gui
 ```
 
 ### Windows
 
-下载 `MVSEP_1.2.0_x64-setup.exe`，运行安装程序即可。
+Download `MVSEP_1.2.0_x64-setup.exe` and run the installer.
 
 ### Debian/Ubuntu
 
@@ -60,101 +60,101 @@ wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.
 sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
 ```
 
-### 从源码构建
+### Build from Source
 
 ```bash
-# 安装依赖
+# Install dependencies
 sudo pacman -S webkit2gtk libappindicator-gtk3 librsvg libvips npm nodejs
 
-# 克隆仓库
+# Clone repository
 git clone https://github.com/AntheaLaffy/mvsep-rs.git
 cd mvsep-rs
 
-# 构建前端
+# Build frontend
 npm install
 npm run build
 
-# 构建后端
+# Build backend
 cd src-tauri
 cargo build --release
 
-# 运行
+# Run
 ./target/release/mvsep-gui
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 首次设置
+### 1. First-time Setup
 
-首次使用需要配置以下内容：
+You need to configure the following:
 
-| 设置项 | 说明 |
-|--------|------|
-| **API Token** | 必填。在 [MVSEP 网站](https://mvsep.com/user-api) 获取 |
-| **输出目录** | 分离结果保存位置 |
-| **输出格式** | 可选 MP3/WAV/FLAC/M4A 等 |
+| Setting | Description |
+|---------|-------------|
+| **API Token** | Required. Get from [MVSEP website](https://mvsep.com/user-api) |
+| **Output Directory** | Where separation results are saved |
+| **Output Format** | MP3/WAV/FLAC/M4A and more |
 
-### 2. 开始分离
+### 2. Start Separation
 
-1. **首页** 拖入音频文件，或点击选择文件
-2. 选择 **算法** 和 **模型选项**（可选）
-3. 选择 **输出格式**
-4. 点击 **一键运行**，等待完成后自动下载到本地
+1. **Home Page** - Drag audio file or click to select file
+2. Select **Algorithm** and **Model Options** (optional)
+3. Select **Output Format**
+4. Click **One-click Run**, wait for completion and auto-download
 
-### 3. 查看任务
+### 3. View Tasks
 
-- **任务页** 查看所有进行中和历史任务
-- 点击 **下载** 可单独下载某个文件
-- 支持 **取消** 进行中的任务
+- **Tasks Page** - View all running and historical tasks
+- Click **Download** to download individual files
+- Support **Cancel** for running tasks
 
-## 页面说明
+## Page Overview
 
-| 页面 | 功能 |
-|------|------|
-| 首页 | 上传音频、选择参数、一键运行 |
-| 任务 | 查看进度、下载结果、管理任务 |
-| 算法 | 浏览可选算法和模型、保存预设 |
-| 设置 | API Token、代理、输出目录等配置 |
-| 日志 | 查看运行日志，用于问题排查 |
+| Page | Function |
+|------|----------|
+| Home | Upload audio, select parameters, one-click run |
+| Tasks | View progress, download results, manage tasks |
+| Algorithms | Browse available algorithms and models, save presets |
+| Settings | API Token, proxy, output directory configuration |
+| Logs | View runtime logs for troubleshooting |
 
-## 常见问题
+## FAQ
 
-### 如何获取 API Token？
+### How to get API Token?
 
-1. 登录 [MVSEP](https://mvsep.com)
-2. 点击右上角用户名 → 选择 **API**
-3. 复制 Token 并粘贴到客户端设置页
+1. Login to [MVSEP](https://mvsep.com)
+2. Click username in top right → Select **API**
+3. Copy Token and paste into client settings
 
-### 分离速度慢怎么办？
+### Separation is slow?
 
-- 查看 **任务页** 的队列信息，了解当前排队人数
-- 切换不同算法可能获得更快的处理速度
-- 考虑使用演示模式（免费但结果公开）
+- Check **Tasks Page** for queue information
+- Try different algorithms for faster processing
+- Consider demo mode (free but results are public)
 
-### 下载中断怎么办？
+### Download interrupted?
 
-无需担心，客户端支持**断点续传**。直接再次点击下载按钮即可从中断处继续。
+No worries, the client supports **resumable downloads**. Just click download again to resume.
 
-### 如何更新算法列表？
+### How to update algorithm list?
 
-进入 **算法页**，点击「获取最新算法信息」从服务器拉取最新算法。
+Go to **Algorithms Page**, click "Get Latest Algorithms" to fetch from server.
 
-## 开发者指南
+## Developer Guide
 
-### 开发模式
+### Development Mode
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-### 构建 AppImage
+### Build AppImage
 
 ```bash
 npm run build:appimage
 ```
 
-### 数据库操作（Rust）
+### Database Operations (Rust)
 
 ```rust
 use mvsep_api_tester::db;
@@ -165,7 +165,7 @@ let algorithms = db.with_conn(|conn| {
 })?;
 ```
 
-### 文件上传（Rust）
+### File Upload (Rust)
 
 ```rust
 use mvsep_api_tester::file_transfer::{self, TransferProgress};
@@ -175,35 +175,35 @@ let hash = file_transfer::upload_file_async(
     std::path::Path::new("./song.mp3"),
     vec![("api_token", "your-token".to_string())],
     None, |progress| {
-        println!("上传: {:.1}%", progress.percent);
+        println!("Upload: {:.1}%", progress.percent);
     },
 ).await?;
 ```
 
-## 项目结构
+## Project Structure
 
 ```text
 mvsep-rs/
-├── src/                      # TypeScript + Vite 前端
-├── src-tauri/                # Tauri 桌面后端
-├── test-api/                 # Rust 核心库 (crates.io: mvsep-api-tester)
-│   ├── src/db/               # 数据库层
-│   ├── src/file_transfer.rs  # 文件传输（上传/下载）
-│   └── src/utils/            # 工具函数
-├── docs/                     # 架构文档和 ADR
-└── manifest/                 # 迁移批次状态
+├── src/                      # TypeScript + Vite frontend
+├── src-tauri/                # Tauri desktop backend
+├── test-api/                 # Rust core library (crates.io: mvsep-api-tester)
+│   ├── src/db/               # Database layer
+│   ├── src/file_transfer.rs  # File transfer (upload/download)
+│   └── src/utils/            # Utility functions
+├── docs/                     # Architecture docs and ADR
+└── manifest/                 # Migration batch status
 ```
 
-## API 参考
+## API Reference
 
-详细文档请访问 [docs.rs](https://docs.rs/mvsep-api-tester)。
+Detailed documentation at [docs.rs](https://docs.rs/mvsep-api-tester).
 
-## 反馈问题
+## Feedback
 
-如遇问题：
-1. 查看 **日志页** 了解详细错误信息
-2. 访问 [GitHub Issues](https://github.com/AntheaLaffy/mvsep-rs/issues) 报告
+If you encounter issues:
+1. Check **Logs Page** for detailed error information
+2. Report at [GitHub Issues](https://github.com/AntheaLaffy/mvsep-rs/issues)
 
-## 许可证
+## License
 
 Apache License 2.0
