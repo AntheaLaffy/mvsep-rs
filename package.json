@@ -1,9 +1,11 @@
 {
   "name": "mvsep-gui",
   "private": true,
-  "version": "1.2.2",
+  "version": "1.2.3",
   "type": "module",
   "scripts": {
+    "version:check": "python3 scripts/version.py check",
+    "version:bump": "python3 scripts/version.py bump",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

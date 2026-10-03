@@ -33,6 +33,9 @@ These existing skills are copied into the repository with their supporting files
 | README, comments, commit and PR explanations | [writing-for-readers](../skills/writing-for-readers/SKILL.md) |
 | GitHub Actions and build automation | [ci-cd](../skills/ci-cd/SKILL.md) |
 | Upstream issues and pull requests | [contributing-upstream](../skills/contributing-upstream/SKILL.md) |
+| Version numbers, dependency ranges, and lockfiles | [versioning-reproducibility](../skills/versioning-reproducibility/SKILL.md) |
+
+Release preparation: [Version Management](version-management.md).
 
 ## Local Source Anchors
 

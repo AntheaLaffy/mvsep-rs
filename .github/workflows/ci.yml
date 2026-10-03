@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run version:check
+      - run: python3 scripts/test_version.py
       - run: npm run build
 
   rust:

@@ -41,6 +41,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check release versions
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            python3 scripts/version.py check --tag "$GITHUB_REF_NAME"
+          else
+            python3 scripts/version.py check
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
