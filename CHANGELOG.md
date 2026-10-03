@@ -9,6 +9,7 @@
 
 - Follow `LC_ALL`, `LC_MESSAGES`, then `LANG` for startup language selection; preserve saved preferences and fall back to English for unsupported locales.
 - Use an English startup window title and default README.
+- Include the root `.DirIcon` required by AppImageHub validation.
 - Replace Chinese endpoint reference and Rust API documentation with English; fix two upload examples' form key types.
 - Replace retired rewrite skills with reusable engineering skills and focused MVSEP guidance.
 

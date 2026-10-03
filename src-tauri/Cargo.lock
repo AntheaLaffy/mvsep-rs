@@ -2355,9 +2355,9 @@ dependencies = [
 
 [[package]]
 name = "mvsep-api-tester"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0f387e74a37083ae71ff50f50d350a1e9e4200ecdbbf8962922767ad5a97f89"
+checksum = "9d5761621443ca164cf49b87b1a902162834652c6e948546b7b52ce586f45a9b"
 dependencies = [
  "anyhow",
  "colored",

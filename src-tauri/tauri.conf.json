@@ -30,6 +30,13 @@
   },
   "bundle": {
     "active": true,
+    "linux": {
+      "appimage": {
+        "files": {
+          ".DirIcon": "icons/128x128.png"
+        }
+      }
+    },
     "targets": "all",
     "icon": [
       "icons/32x32.png",
