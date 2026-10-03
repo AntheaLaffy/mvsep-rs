@@ -196,7 +196,7 @@ mvsep-rs/
 
 ## API Reference
 
-Detailed documentation at [docs.rs](https://docs.rs/mvsep-api-tester).
+See the [MVSep API endpoint reference](doc/mvsep_api_endpoints.md) and the [Rust library documentation on docs.rs](https://docs.rs/mvsep-api-tester).
 
 ## Feedback
 

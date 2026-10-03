@@ -1,26 +1,26 @@
-//! 文件传输模块。
+//! File transfer module.
 //!
-//! 提供流式上传（async + 进度回调）、流式下载（断点续传 + 进度追踪）、
-//! 文件重命名等功能。
+//! Provides streaming uploads (async with progress callbacks), streaming downloads (resume and progress tracking),
+//! and file renaming.
 //!
-//! ## 上传
+//! ## Upload
 //!
-//! [`upload_file`] 使用 tokio 异步运行时读取文件并流式发送 multipart 请求，
-//! 通过回调实时报告上传进度。
+//! [`upload_file`] reads a file and streams a multipart request using the Tokio async runtime,
+//! reporting upload progress through a callback.
 //!
-//! ## 下载
+//! ## Download
 //!
-//! [`download_file`] 流式读取响应体并写入磁盘，支持：
-//! - **断点续传**：通过 `Range` 头 + `.part` 文件实现
-//! - **进度回调**：每 150ms 报告速度、百分比、已传输字节
-//! - **完成重命名**：`.part` → 最终文件
+//! [`download_file`] streams the response body to disk and supports:
+//! - **Resume**: uses a `Range` header and a `.part` file
+//! - **Progress callbacks**: reports speed, percentage, and transferred bytes every 150 ms
+//! - **Rename on completion**: `.part` to the final file
 //!
-//! ## 重命名
+//! ## Renaming
 //!
-//! [`build_local_name`] 将远端产物名映射为本地文件名：
+//! [`build_local_name`] maps a remote output name to a local filename:
 //! ```text
-//! 远端: 20260626..._melroformer_mt_10_vocals.flac
-//! 本地: {原文件名主干}_vocals.flac
+//! Remote: 20260626..._melroformer_mt_10_vocals.flac
+//! Local: {original_filename_stem}_vocals.flac
 //! ```
 
 use futures_util::StreamExt;
@@ -33,61 +33,61 @@ use std::time::{Duration, Instant};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
-/// 上传/下载进度信息
+/// Upload/download progress information
 ///
-/// 通过进度回调传递给调用方，每 ~120ms（上传）或 ~150ms（下载）更新一次。
+/// Passed to the caller through a progress callback approximately every 120 ms for uploads or 150 ms for downloads.
 ///
-/// # 示例
+/// # Examples
 ///
 /// ```rust,no_run
 /// use mvsep_api_tester::file_transfer::TransferProgress;
 ///
 /// let progress_cb = |p: TransferProgress| {
-///     println!("文件: {}", p.file_name);
-///     println!("进度: {:.1}%", p.percent);
-///     println!("速度: {:.1} KB/s", p.speed_bps / 1024.0);
+///     println!("File: {}", p.file_name);
+///     println!("Progress: {:.1}%", p.percent);
+///     println!("Speed: {:.1} KB/s", p.speed_bps / 1024.0);
 ///     if p.done {
-///         println!("传输完成!");
+///         println!("Transfer complete!");
 ///     }
 /// };
 /// ```
 #[derive(Debug, Clone)]
 pub struct TransferProgress {
-    /// 文件名
+    /// Filename
     pub file_name: String,
-    /// 已传输字节数
+    /// Transferred bytes
     pub bytes: u64,
-    /// 总字节数（可能未知）
+    /// Total bytes, if known
     pub total_bytes: Option<u64>,
-    /// 传输速度（字节/秒）
+    /// Transfer speed in bytes per second
     pub speed_bps: f64,
-    /// 进度百分比（0-100）
+    /// Progress percentage (0–100)
     pub percent: f32,
-    /// 是否已完成
+    /// Whether the transfer is complete
     pub done: bool,
-    /// 是否失败
+    /// Whether the transfer failed
     pub failed: bool,
 }
 
-/// 结构化传输错误
+/// Structured transfer error
 ///
-/// 用于异步调用者保存 HTTP/文件上下文信息，在转换为面向用户的字符串之前保留详细错误信息。
+/// Preserves HTTP and file context for async callers before converting errors to user-facing strings.
 ///
-/// # 示例
+/// # Examples
 ///
 /// ```rust,no_run
 /// use mvsep_api_tester::file_transfer::TransferError;
 ///
-/// let error = TransferError::new("网络连接失败")
+/// let error = TransferError::new("Network connection failed")
 ///     .with_url("https://api.example.com/upload")
 ///     .with_http_status(503);
 ///
 /// if error.is_cancelled() {
-///     println!("传输已取消");
+///     println!("Transfer cancelled");
 /// } else {
-///     println!("错误: {}", error);
+///     println!("Error: {}", error);
 ///     if let Some(status) = error.http_status() {
-///         println!("HTTP 状态: {}", status);
+///         println!("HTTP status: {}", status);
 ///     }
 /// }
 /// ```
@@ -263,9 +263,9 @@ fn file_stem(name: &str) -> String {
 /// and prefix it with the original file's stem.
 ///
 /// Example:
-///   original: "螢塚-Calvaria.mp3"
+///   original: "Calvaria.mp3"
 ///   remote:   "20260626..._melroformer_mt_10_vocals.flac"
-///   result:   "螢塚-Calvaria_vocals.flac"
+///   result:   "Calvaria_vocals.flac"
 pub fn build_local_name(original_name: &str, remote_name: &str) -> String {
     let original_stem = sanitize_name(&file_stem(original_name));
 
@@ -519,25 +519,25 @@ pub async fn upload_file_async(
     Ok(hash)
 }
 
-/// 同步上传文件（内部创建 tokio runtime）
+/// Upload a file synchronously using an internal Tokio runtime
 ///
-/// 提供代理支持的阻塞版本上传函数，适合非异步上下文使用。
+/// Blocking upload with proxy support for synchronous callers.
 ///
-/// # 参数
+/// # Parameters
 ///
-/// - `proxy_host`: 代理主机地址（仅在 `proxy_mode` 为 `"manual"` 时有效）
-/// - `proxy_port`: 代理端口（仅在 `proxy_mode` 为 `"manual"` 时有效）
-/// - `proxy_mode`: 代理模式（`"auto"`/`"manual"`/`"none"`）
-/// - `url`: 上传目标 URL
-/// - `file_path`: 本地文件路径
-/// - `extra_fields`: 额外的表单字段（如 API token）
-/// - `progress_cb`: 进度回调函数
+/// - `proxy_host`: Proxy host (used only when `proxy_mode` is `"manual"`)
+/// - `proxy_port`: Proxy port (used only when `proxy_mode` is `"manual"`)
+/// - `proxy_mode`: Proxy mode (`"auto"`, `"manual"`, or `"none"`)
+/// - `url`: Upload destination URL
+/// - `file_path`: Local file path
+/// - `extra_fields`: Additional form fields, such as the API token
+/// - `progress_cb`: Progress callback
 ///
-/// # 返回
+/// # Returns
 ///
-/// `anyhow::Result<String>` - 任务 Hash 或错误
+/// `anyhow::Result<String>` - Task hash or error
 ///
-/// # 示例
+/// # Examples
 ///
 /// ```rust,no_run
 /// use mvsep_api_tester::file_transfer;
@@ -548,8 +548,8 @@ pub async fn upload_file_async(
 ///     "none",
 ///     "https://api.mvsep.com/upload",
 ///     std::path::Path::new("./song.mp3"),
-///     vec![("api_token", "your-token".to_string())],
-///     |p| println!("上传: {:.1}%", p.percent),
+///     vec![("api_token".to_string(), "your-token".to_string())],
+///     |p| println!("Upload: {:.1}%", p.percent),
 /// ).unwrap();
 /// ```
 pub fn upload_file(

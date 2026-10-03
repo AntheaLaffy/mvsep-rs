@@ -1,29 +1,29 @@
-//! 用户配置数据库（user_config.db）
+//! User configuration database (user_config.db)
 //!
-//! 基于 SQLite 的 Key-Value 配置存储，支持多种数据类型：
+//! SQLite key-value configuration storage supporting the following types:
 //!
-//! - `string` - 字符串
-//! - `bool` - 布尔值
-//! - `int` - 整数
-//! - `float` - 浮点数
-//! - `json` - JSON 对象
+//! - `string` - String
+//! - `bool` - Boolean value
+//! - `int` - Integer
+//! - `float` - Floating-point number
+//! - `json` - JSON object
 //!
-//! # 示例
+//! # Examples
 //!
 //! ```rust,no_run
 //! use mvsep_api_tester::db::user_config;
 //!
 //! let db = user_config::UserConfigDB::default().unwrap();
 //!
-//! // 设置和获取字符串
+//! // Set and getString
 //! db.set_string("api_token", "my-token").unwrap();
 //! let token = db.get_string("api_token").unwrap();
 //!
-//! // 设置和获取布尔值
+//! // Set and getBoolean value
 //! db.set_bool("auto_update", true).unwrap();
 //! let auto_update = db.get_bool("auto_update").unwrap();
 //!
-//! // 设置和获取 JSON
+//! // Set and get JSON
 //! use serde_json::json;
 //! db.set_json("settings", &json!({"theme": "dark"})).unwrap();
 //! let settings: Option<serde_json::Value> = db.get_json("settings").unwrap();
@@ -33,36 +33,36 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-/// 用户配置条目
+/// User configuration entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserConfigEntry {
-    /// 配置键
+    /// Configuration key
     pub key: String,
-    /// 配置值（字符串形式存储）
+    /// Configuration value stored as a string
     pub value: String,
-    /// 值类型（string, bool, int, float, json）
+    /// Value type (string, bool, int, float, json)
     pub value_type: String,
-    /// 更新时间
+    /// Update time
     pub updated_at: String,
 }
 
-/// 用户配置数据库
+/// User configuration database
 ///
-/// 提供类型安全的 Key-Value 存储，支持字符串、布尔值、整数、浮点数和 JSON。
+/// Provides type-safe key-value storage for strings, booleans, integers, floating-point numbers, and JSON.
 pub struct UserConfigDB {
     conn: Connection,
 }
 
 impl UserConfigDB {
-    /// 创建新的配置数据库连接
+    /// Create a configuration database connection
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `path`: 数据库文件路径
+    /// - `path`: Database file path
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Self>` - 数据库实例或错误
+    /// `Result<Self>` - Database instance or error
     pub fn new(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
         let db = Self { conn };
@@ -70,13 +70,13 @@ impl UserConfigDB {
         Ok(db)
     }
 
-    /// 创建默认配置数据库连接
+    /// Create the default configuration database connection
     ///
-    /// 默认路径为 `$HOME/user_config.db`。
+    /// The default path is `$HOME/user_config.db`.
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Self>` - 数据库实例或错误
+    /// `Result<Self>` - Database instance or error
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Self> {
         let path = format!(
@@ -111,16 +111,16 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 设置字符串值
+    /// Set a string value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
-    /// - `value`: 字符串值
+    /// - `key`: Configuration key
+    /// - `value`: String value
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<()>` - 成功或错误
+    /// `Result<()>` - Success or error
     pub fn set_string(&self, key: &str, value: &str) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at) VALUES (?1, ?2, 'string', datetime('now'))",
@@ -129,15 +129,15 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 获取字符串值
+    /// Get a string value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Option<String>>` - 字符串值或 `None`
+    /// `Result<Option<String>>` - String valueor `None`
     pub fn get_string(&self, key: &str) -> Result<Option<String>> {
         let mut stmt = self
             .conn
@@ -149,16 +149,16 @@ impl UserConfigDB {
         }
     }
 
-    /// 设置布尔值
+    /// Set a boolean value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
-    /// - `value`: 布尔值
+    /// - `key`: Configuration key
+    /// - `value`: Boolean value
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<()>` - 成功或错误
+    /// `Result<()>` - Success or error
     pub fn set_bool(&self, key: &str, value: bool) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at) VALUES (?1, ?2, 'bool', datetime('now'))",
@@ -167,15 +167,15 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 获取布尔值
+    /// Get a boolean value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Option<bool>>` - 布尔值或 `None`
+    /// `Result<Option<bool>>` - Boolean valueor `None`
     pub fn get_bool(&self, key: &str) -> Result<Option<bool>> {
         match self.get_string(key)? {
             Some(value) => Ok(Some(value == "true")),
@@ -183,16 +183,16 @@ impl UserConfigDB {
         }
     }
 
-    /// 设置整数值
+    /// Set an integer value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
-    /// - `value`: 整数值
+    /// - `key`: Configuration key
+    /// - `value`: Integer value
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<()>` - 成功或错误
+    /// `Result<()>` - Success or error
     pub fn set_int(&self, key: &str, value: i64) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at) VALUES (?1, ?2, 'int', datetime('now'))",
@@ -201,15 +201,15 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 获取整数值
+    /// Get an integer value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Option<i64>>` - 整数值或 `None`
+    /// `Result<Option<i64>>` - Integer valueor `None`
     pub fn get_int(&self, key: &str) -> Result<Option<i64>> {
         match self.get_string(key)? {
             Some(value) => match value.parse::<i64>() {
@@ -220,16 +220,16 @@ impl UserConfigDB {
         }
     }
 
-    /// 设置浮点数值
+    /// Set a floating-point value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
-    /// - `value`: 浮点数值
+    /// - `key`: Configuration key
+    /// - `value`: Floating-point value
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<()>` - 成功或错误
+    /// `Result<()>` - Success or error
     pub fn set_float(&self, key: &str, value: f64) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO user_config (key, value, value_type, updated_at) VALUES (?1, ?2, 'float', datetime('now'))",
@@ -238,15 +238,15 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 获取浮点数值
+    /// Get a floating-point value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Option<f64>>` - 浮点数值或 `None`
+    /// `Result<Option<f64>>` - Floating-point valueor `None`
     pub fn get_float(&self, key: &str) -> Result<Option<f64>> {
         match self.get_string(key)? {
             Some(value) => match value.parse::<f64>() {
@@ -257,16 +257,16 @@ impl UserConfigDB {
         }
     }
 
-    /// 设置 JSON 值
+    /// Set a JSON value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
-    /// - `value`: 实现 `Serialize` trait 的值
+    /// - `key`: Configuration key
+    /// - `value`: Value implementing the `Serialize` trait
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<()>` - 成功或错误
+    /// `Result<()>` - Success or error
     pub fn set_json<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
         let json_str = serde_json::to_string(value)?;
         self.conn.execute(
@@ -276,15 +276,15 @@ impl UserConfigDB {
         Ok(())
     }
 
-    /// 获取 JSON 值
+    /// Get a JSON value
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Option<T>>` - JSON 反序列化后的值或 `None`
+    /// `Result<Option<T>>` - Deserialized JSON valueor `None`
     pub fn get_json<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Result<Option<T>> {
         match self.get_string(key)? {
             Some(value) => match serde_json::from_str(&value) {
@@ -295,15 +295,15 @@ impl UserConfigDB {
         }
     }
 
-    /// 删除配置项
+    /// Delete a configuration entry
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<bool>` - 是否删除成功
+    /// `Result<bool>` - Whether an entry was deleted
     pub fn delete(&self, key: &str) -> Result<bool> {
         let rows_affected = self
             .conn
@@ -311,15 +311,15 @@ impl UserConfigDB {
         Ok(rows_affected > 0)
     }
 
-    /// 检查配置项是否存在
+    /// Check whether a configuration entry exists
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `key`: 配置键
+    /// - `key`: Configuration key
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<bool>` - 是否存在
+    /// `Result<bool>` - Whether an entry exists
     pub fn exists(&self, key: &str) -> Result<bool> {
         let mut stmt = self
             .conn
@@ -328,15 +328,15 @@ impl UserConfigDB {
         Ok(count > 0)
     }
 
-    /// 按前缀获取配置项
+    /// Get configuration entries by prefix
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `prefix`: 键前缀
+    /// - `prefix`: Key prefix
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Vec<UserConfigEntry>>` - 匹配的配置项列表
+    /// `Result<Vec<UserConfigEntry>>` - Matching configuration entries
     pub fn get_all_by_prefix(&self, prefix: &str) -> Result<Vec<UserConfigEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT key, value, value_type, updated_at FROM user_config WHERE key LIKE ?1 || '%' ORDER BY key"
@@ -352,15 +352,15 @@ impl UserConfigDB {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
     }
 
-    /// 按类型获取配置项
+    /// Get configuration entries by value type
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `value_type`: 值类型（string, bool, int, float, json）
+    /// - `value_type`: Value type (string, bool, int, float, json)
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Vec<UserConfigEntry>>` - 匹配的配置项列表
+    /// `Result<Vec<UserConfigEntry>>` - Matching configuration entries
     pub fn get_all_by_type(&self, value_type: &str) -> Result<Vec<UserConfigEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT key, value, value_type, updated_at FROM user_config WHERE value_type = ?1 ORDER BY key"
@@ -376,11 +376,11 @@ impl UserConfigDB {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
     }
 
-    /// 获取所有配置项
+    /// Get all configuration entries
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Vec<UserConfigEntry>>` - 所有配置项列表
+    /// `Result<Vec<UserConfigEntry>>` - All configuration entries
     pub fn get_all(&self) -> Result<Vec<UserConfigEntry>> {
         let mut stmt = self
             .conn
@@ -396,47 +396,47 @@ impl UserConfigDB {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
     }
 
-    /// 获取配置项数量
+    /// Get the number of configuration entries
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<i64>` - 配置项数量
+    /// `Result<i64>` - Number of configuration entries
     pub fn count(&self) -> Result<i64> {
         let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM user_config")?;
         let count: i64 = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
-    /// 清空所有配置项
+    /// Delete all configuration entries
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<u64>` - 删除的配置项数量
+    /// `Result<u64>` - Number of deleted configuration entries
     pub fn clear_all(&self) -> Result<u64> {
         let affected = self.conn.execute("DELETE FROM user_config", [])?;
         Ok(affected as u64)
     }
 
-    /// 导出所有配置为 JSON
+    /// Export all configuration as JSON
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<String>` - JSON 字符串
+    /// `Result<String>` - JSON string
     pub fn export_to_json(&self) -> Result<String> {
         let entries = self.get_all()?;
         let json = serde_json::to_string_pretty(&entries)?;
         Ok(json)
     }
 
-    /// 从 JSON 导入配置
+    /// Import configuration from JSON
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `json_str`: JSON 字符串
+    /// - `json_str`: JSON string
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<u64>` - 导入的配置项数量
+    /// `Result<u64>` - Number of imported configuration entries
     pub fn import_from_json(&self, json_str: &str) -> Result<u64> {
         let entries: Vec<UserConfigEntry> = serde_json::from_str(json_str)?;
         let mut count = 0u64;

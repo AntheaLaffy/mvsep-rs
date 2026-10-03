@@ -1,18 +1,18 @@
-//! 任务数据库（tasks.db）
+//! Task database (tasks.db)
 //!
-//! 独立的 SQLite 数据库，追踪任务生命周期和下载进度。
+//! Separate SQLite database tracking task lifecycle and download progress.
 //!
-//! # 任务状态流转
+//! # Task state transitions
 //!
 //! ```text
 //! uploaded → queued → processing → done
 //!                     → failed
-//!                               → expired（文件过期）
+//!                               → expired (Files expired)
 //! ```
 //!
-//! # 输出文件追踪
+//! # Output file tracking
 //!
-//! `output_files` 字段存 JSON，记录每个产物的远程 URL、本地路径、下载状态：
+//! The `output_files` field stores JSON containing each output's remote URL, local path, and download status:
 //!
 //! ```json
 //! [
@@ -24,12 +24,12 @@
 use rusqlite::Connection;
 use std::sync::Mutex;
 
-/// 任务数据库连接
+/// Task database connection
 ///
-/// 管理任务和任务历史数据，支持任务状态追踪和下载进度记录。
-/// 默认路径由 [`crate::utils::paths::tasks_db_path`] 确定。
+/// Manages tasks and task history, including task states and download progress.
+/// The default path comes from [`crate::utils::paths::tasks_db_path`].
 ///
-/// # 示例
+/// # Examples
 ///
 /// ```rust,no_run
 /// use mvsep_api_tester::db::tasks_db;
@@ -40,20 +40,20 @@ use std::sync::Mutex;
 /// }).unwrap();
 /// ```
 pub struct TasksDatabase {
-    /// SQLite 连接（带 Mutex 保护）
+    /// SQLite connection protected by a mutex
     pub conn: Mutex<Connection>,
 }
 
 impl TasksDatabase {
-    /// 创建新的任务数据库连接
+    /// Create a task database connection
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `db_path`: 数据库文件路径，`None` 则使用默认路径
+    /// - `db_path`: Database file path; `None` selects the default path
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Self>` - 数据库实例或错误
+    /// `Result<Self>` - Database instance or error
     pub fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
         let path = db_path.map(|p| p.to_string()).unwrap_or_else(|| {
             crate::utils::paths::tasks_db_path()
@@ -81,17 +81,17 @@ impl TasksDatabase {
         Ok(db)
     }
 
-    /// 在数据库连接上执行闭包
+    /// Execute a closure with the database connection
     ///
-    /// 获取锁并执行闭包，自动处理锁中毒错误。
+    /// Acquires the lock and runs the closure, converting lock poisoning into an error.
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `f`: 接受 `&Connection` 并返回 `anyhow::Result<T>` 的闭包
+    /// - `f`: Closure accepting `&Connection` and returning `anyhow::Result<T>`
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `anyhow::Result<T>` - 闭包返回值或错误
+    /// `anyhow::Result<T>` - Closure return value or error
     pub fn with_conn<F, T>(&self, f: F) -> anyhow::Result<T>
     where
         F: FnOnce(&Connection) -> anyhow::Result<T>,

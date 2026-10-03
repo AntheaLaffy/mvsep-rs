@@ -1,126 +1,126 @@
-//! 数据访问层
+//! Data access layer
 //!
-//! 提供数据库表的行类型定义和 CRUD 操作函数。
+//! Provides row types and CRUD operations for database tables.
 //!
-//! # 行类型
+//! # Row types
 //!
-//! | 类型 | 对应表 | 说明 |
+//! | Type | Table | Description |
 //! |------|--------|------|
-//! | [`AlgorithmGroupRow`] | `algorithm_groups` | 算法分组 |
-//! | [`AlgorithmRow`] | `algorithms` | 算法 |
-//! | [`AlgorithmFieldRow`] | `algorithm_fields` | 算法参数字段 |
-//! | [`TaskRow`] | `tasks` | 活动任务 |
-//! | [`TaskHistoryRow`] | `task_history` | 任务历史 |
-//! | [`PresetRow`] | `presets` | 预设配置 |
-//! | [`ConfigRow`] | `config` | 用户配置 |
-//! | [`OutputFormatRow`] | `output_formats` | 输出格式 |
-//! | [`LogEntryRow`] | `log_entries` | 日志条目 |
+//! | [`AlgorithmGroupRow`] | `algorithm_groups` | Algorithm groups |
+//! | [`AlgorithmRow`] | `algorithms` | Algorithms |
+//! | [`AlgorithmFieldRow`] | `algorithm_fields` | Algorithm parameter fields |
+//! | [`TaskRow`] | `tasks` | Active tasks |
+//! | [`TaskHistoryRow`] | `task_history` | Task history |
+//! | [`PresetRow`] | `presets` | Preset configuration |
+//! | [`ConfigRow`] | `config` | User configuration |
+//! | [`OutputFormatRow`] | `output_formats` | Output format |
+//! | [`LogEntryRow`] | `log_entries` | Log entries |
 
 use anyhow::Result;
 use colored::Colorize;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-/// 算法分组行
+/// Algorithm group row
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmGroupRow {
-    /// 分组 ID
+    /// Group ID
     pub id: i32,
-    /// 分组名称
+    /// Group name
     pub name: String,
 }
 
-/// 算法行
+/// Algorithm row
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmRow {
-    /// 算法 ID
+    /// Algorithm ID
     pub id: i32,
-    /// 算法名称
+    /// Algorithm name
     pub name: String,
-    /// 所属分组 ID
+    /// Parent group ID
     pub group_id: i32,
-    /// 价格系数
+    /// Price coefficient
     #[serde(default)]
     pub price_coefficient: f64,
-    /// 方向标识
+    /// Orientation flag
     #[serde(default)]
     pub orientation: i32,
 }
 
-/// 算法参数字段行
+/// Algorithm parameter field row
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlgorithmFieldRow {
-    /// 字段 ID
+    /// Field ID
     pub id: i64,
-    /// 所属算法 ID
+    /// Parent algorithm ID
     pub algorithm_id: i32,
-    /// 字段名称
+    /// Field name
     pub name: String,
-    /// 字段说明文本
+    /// Field description
     #[serde(default)]
     pub text: Option<String>,
-    /// 可选值（JSON 数组）
+    /// Available values as a JSON array
     #[serde(default)]
     pub options: Option<String>,
-    /// 默认选中值的 Key
+    /// Key of the default selected value
     #[serde(default)]
     pub default_key: Option<String>,
 }
 
-/// 活动任务行
+/// Active task row
 ///
-/// 用于追踪正在进行的任务状态和下载进度。
+/// Tracks active task states and download progress.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskRow {
-    /// 任务 Hash（主键）
+    /// Task hash (primary key)
     pub hash: String,
-    /// 原始文件名
+    /// Original filename
     pub file_name: String,
-    /// 算法 ID
+    /// Algorithm ID
     pub algorithm_id: i32,
-    /// 算法名称
+    /// Algorithm name
     pub algorithm_name: String,
-    /// 模型 ID（可选）
+    /// Model ID (optional)
     pub model_id: Option<i32>,
-    /// 模型名称（可选）
+    /// Model name (optional)
     pub model_name: Option<String>,
-    /// 模型 2 ID（可选）
+    /// Model 2 ID (optional)
     pub model2_id: Option<i32>,
-    /// 模型 2 名称（可选）
+    /// Model 2 name (optional)
     pub model2_name: Option<String>,
-    /// 模型 3 ID（可选）
+    /// Model 3 ID (optional)
     pub model3_id: Option<i32>,
-    /// 模型 3 名称（可选）
+    /// Model 3 name (optional)
     pub model3_name: Option<String>,
-    /// 输出格式 ID
+    /// Output format ID
     pub format: i32,
-    /// 任务状态（uploaded/queued/processing/done/failed）
+    /// Task status (uploaded/queued/processing/done/failed)
     pub status: String,
-    /// 任务进度（0-100）
+    /// Task progress (0–100)
     pub progress: f64,
-    /// 创建时间戳（Unix 毫秒）
+    /// Creation timestamp in Unix milliseconds
     pub created_at: i64,
-    /// 输出文件列表（JSON）
+    /// Output file list as JSON
     pub output_files: String,
-    /// 错误信息（可选）
+    /// Error message (optional)
     pub error: Option<String>,
-    /// 提示消息（可选）
+    /// Informational message (optional)
     pub message: Option<String>,
-    /// 队列中的位置（可选）
+    /// Queue position (optional)
     pub queue_count: Option<i32>,
-    /// 当前排队序号（可选）
+    /// Current queue order (optional)
     pub current_order: Option<i32>,
-    /// 当前阶段（uploaded/queued/processing/downloading）
+    /// Current phase (uploaded/queued/processing/downloading)
     pub phase: String,
-    /// 当前下载文件名（可选）
+    /// Current download filename (optional)
     pub download_file_name: Option<String>,
-    /// 已下载字节数
+    /// Downloaded bytes
     pub download_bytes: i64,
-    /// 总下载字节数（可选）
+    /// Total download bytes (optional)
     pub download_total_bytes: Option<i64>,
-    /// 下载速度（字节/秒）
+    /// Download speed in bytes per second
     pub download_speed_bps: f64,
-    /// 下载进度（0-100）
+    /// Download progress (0–100)
     pub download_percent: f64,
 }
 
@@ -763,7 +763,7 @@ pub fn init_default_output_formats(conn: &Connection) -> Result<usize> {
     Ok(count)
 }
 
-/// 设置算法支持的输出格式列表（先清除旧关联，再写入新关联）
+/// Set supported output formats for an algorithm, replacing existing associations
 pub fn set_algorithm_output_formats(
     conn: &Connection,
     algorithm_id: i32,
@@ -779,7 +779,7 @@ pub fn set_algorithm_output_formats(
     Ok(())
 }
 
-/// 获取某个算法支持的所有输出格式
+/// Get all output formats supported by an algorithm
 pub fn get_formats_for_algorithm(
     conn: &Connection,
     algorithm_id: i32,
@@ -803,7 +803,7 @@ pub fn get_formats_for_algorithm(
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
 }
 
-/// 获取所有算法-格式关联
+/// Get all algorithm-format associations
 pub fn get_all_algorithm_format_associations(conn: &Connection) -> Result<Vec<AlgorithmFormatRow>> {
     let mut stmt = conn.prepare("SELECT algorithm_id, format_id FROM algorithm_output_formats ORDER BY algorithm_id, format_id")?;
     let rows = stmt.query_map([], |row| {
@@ -815,7 +815,7 @@ pub fn get_all_algorithm_format_associations(conn: &Connection) -> Result<Vec<Al
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.into())
 }
 
-/// 初始化默认算法-格式关联（所有算法关联所有格式）
+/// Initialize default associations by linking every algorithm to every format
 pub fn init_default_algorithm_format_associations(conn: &Connection) -> Result<usize> {
     let count = conn.execute(
         "INSERT OR IGNORE INTO algorithm_output_formats (algorithm_id, format_id)
@@ -826,7 +826,7 @@ pub fn init_default_algorithm_format_associations(conn: &Connection) -> Result<u
     Ok(count)
 }
 
-/// 清除某个算法的所有格式关联
+/// Remove all format associations for an algorithm
 pub fn remove_algorithm_output_formats(conn: &Connection, algorithm_id: i32) -> Result<()> {
     conn.execute(
         "DELETE FROM algorithm_output_formats WHERE algorithm_id = ?1",

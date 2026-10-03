@@ -1,21 +1,21 @@
-//! 工具函数模块
+//! Utility module
 //!
-//! 提供路径处理、控制台输出等通用工具函数。
+//! Provides common utilities for paths and console output.
 
 pub mod console;
 pub mod paths;
 
 use std::path::PathBuf;
 
-/// 获取数据目录路径
+/// Get the data directory path
 ///
-/// 根据操作系统返回合适的数据目录：
-/// - Unix: 当前目录 `.`
+/// Returns the data directory for the operating system:
+/// - Unix: Current directory `.`
 /// - Windows: `%APPDATA%\mvsep-tester`
 ///
-/// # 返回
+/// # Returns
 ///
-/// `PathBuf` - 数据目录路径
+/// `PathBuf` - Data directory path
 pub fn data_dir() -> PathBuf {
     #[cfg(unix)]
     {
@@ -30,13 +30,13 @@ pub fn data_dir() -> PathBuf {
     }
 }
 
-/// 获取主数据库路径
+/// Get the main database path
 ///
-/// 默认路径为数据目录下的 `mvsep.db`。
+/// The default path is `mvsep.db` in the data directory.
 ///
-/// # 返回
+/// # Returns
 ///
-/// `PathBuf` - 数据库文件路径
+/// `PathBuf` - Database file path
 pub fn db_path() -> PathBuf {
     data_dir().join("mvsep.db")
 }

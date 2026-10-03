@@ -1,11 +1,11 @@
-//! 控制台工具函数
+//! Console utilities
 //!
-//! 提供控制台初始化和颜色支持。
+//! Provides console initialization and color support.
 
-/// 初始化控制台
+/// Initialize the console
 ///
-/// 在 Windows 上启用虚拟终端以支持颜色输出。
-/// 在 Unix 系统上无需特殊处理。
+/// Enables virtual terminal processing on Windows for color output.
+/// No special handling is needed on Unix systems.
 pub fn init() {
     #[cfg(windows)]
     {

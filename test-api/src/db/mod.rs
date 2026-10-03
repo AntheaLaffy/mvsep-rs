@@ -1,14 +1,14 @@
-//! 数据库模块
+//! Database module
 //!
-//! 提供三个独立的 SQLite 数据库管理：
+//! Manages three separate SQLite databases:
 //!
-//! - [`Database`] - 主数据库，管理算法缓存
-//! - [`tasks_db::TasksDatabase`] - 任务数据库，追踪任务生命周期
-//! - [`user_config::UserConfigDB`] - 用户配置数据库，存储 Key-Value 配置
+//! - [`Database`] - Main database for algorithm caching
+//! - [`tasks_db::TasksDatabase`] - Task database tracking the task lifecycle
+//! - [`user_config::UserConfigDB`] - User configuration database for key-value storage
 //!
-//! # 连接管理
+//! # Connection management
 //!
-//! 所有数据库使用 WAL 模式和 5 秒 busy timeout，确保多线程环境下的并发安全。
+//! All databases use WAL mode and a five-second busy timeout for concurrent access from multiple threads.
 
 pub mod migrations;
 pub mod repositories;
@@ -18,12 +18,12 @@ pub mod user_config;
 use rusqlite::Connection;
 use std::sync::Mutex;
 
-/// 主数据库连接（算法缓存）
+/// Main database connection (algorithm cache)
 ///
-/// 管理算法、算法字段、输出格式、预设、任务历史等数据。
-/// 默认路径由 [`crate::utils::paths::db_path`] 确定。
+/// Manages algorithms, algorithm fields, output formats, presets, and task history.
+/// The default path comes from [`crate::utils::paths::db_path`].
 ///
-/// # 示例
+/// # Examples
 ///
 /// ```rust,no_run
 /// use mvsep_api_tester::db;
@@ -34,20 +34,20 @@ use std::sync::Mutex;
 /// }).unwrap();
 /// ```
 pub struct Database {
-    /// SQLite 连接（带 Mutex 保护）
+    /// SQLite connection protected by a mutex
     pub conn: Mutex<Connection>,
 }
 
 impl Database {
-    /// 创建新的数据库连接
+    /// Create a database connection
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `db_path`: 数据库文件路径，`None` 则使用默认路径
+    /// - `db_path`: Database file path; `None` selects the default path
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `Result<Self>` - 数据库实例或错误
+    /// `Result<Self>` - Database instance or error
     pub fn new(db_path: Option<&str>) -> anyhow::Result<Self> {
         let path = db_path
             .map(|p| p.to_string())
@@ -73,17 +73,17 @@ impl Database {
         Ok(db)
     }
 
-    /// 在数据库连接上执行闭包
+    /// Execute a closure with the database connection
     ///
-    /// 获取锁并执行闭包，自动处理锁中毒错误。
+    /// Acquires the lock and runs the closure, converting lock poisoning into an error.
     ///
-    /// # 参数
+    /// # Parameters
     ///
-    /// - `f`: 接受 `&Connection` 并返回 `anyhow::Result<T>` 的闭包
+    /// - `f`: Closure accepting `&Connection` and returning `anyhow::Result<T>`
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `anyhow::Result<T>` - 闭包返回值或错误
+    /// `anyhow::Result<T>` - Closure return value or error
     pub fn with_conn<F, T>(&self, f: F) -> anyhow::Result<T>
     where
         F: FnOnce(&Connection) -> anyhow::Result<T>,
@@ -95,11 +95,11 @@ impl Database {
         f(&conn)
     }
 
-    /// 获取默认数据库路径
+    /// Get the default database path
     ///
-    /// # 返回
+    /// # Returns
     ///
-    /// `String` - 默认数据库文件路径
+    /// `String` - Default database file path
     pub fn default_path() -> String {
         crate::utils::paths::db_path().to_string_lossy().to_string()
     }

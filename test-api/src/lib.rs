@@ -1,43 +1,43 @@
-//! MVSep API tester - 音乐分离 API 的 Rust 实现
+//! MVSep API tester - Rust implementation of the music separation API
 //!
-//! 提供算法缓存、任务管理、流式上传下载、断点续传等核心能力。
+//! Provides algorithm caching, task management, streaming transfers, and resumable downloads.
 //!
-//! # 三数据库架构
+//! # Three-database architecture
 //!
-//! | 数据库 | 位置 | 内容 |
+//! | Database | Location | Contents |
 //! |--------|------|------|
-//! | `mvsep.db` | [`db::Database`] | 算法缓存（算法、字段、格式、关联） |
-//! | `tasks.db` | [`db::tasks_db::TasksDatabase`] | 任务追踪（任务、历史、下载进度） |
-//! | `user_config.db` | [`db::user_config::UserConfigDB`] | 用户配置（Token、代理、预设） |
+//! | `mvsep.db` | [`db::Database`] | Algorithm cache (algorithms, fields, formats, associations) |
+//! | `tasks.db` | [`db::tasks_db::TasksDatabase`] | Task tracking (tasks, history, download progress) |
+//! | `user_config.db` | [`db::user_config::UserConfigDB`] | User configuration (tokens, proxies, presets) |
 //!
-//! # 快速开始
+//! # Quick start
 //!
 //! ```rust,no_run
 //! use mvsep_api_tester::db;
 //! use mvsep_api_tester::file_transfer;
 //! use std::path::Path;
 //!
-//! // 打开主数据库（算法缓存）
+//! // Open the main database (algorithm cache)
 //! let db = db::Database::new(None).unwrap();
 //! let tasks_db = db::tasks_db::TasksDatabase::new(None).unwrap();
 //!
-//! // 读取算法列表
+//! // Read the algorithm list
 //! let algos = db.with_conn(|c| {
 //!     db::repositories::get_all_algorithms(c)
 //! }).unwrap();
 //!
-//! // 流式下载文件（阻塞版本）
+//! // Stream a file download (blocking version)
 //! let client = reqwest::blocking::Client::new();
 //! file_transfer::download_file(
 //!     &client,
 //!     "https://example.com/file.wav",
 //!     Path::new("./output.wav"),
-//!     0, // resume_from = 0 表示从头下载
+//!     0, // resume_from = 0 starts from the beginning
 //!     |p| println!("{:.1}%", p.percent),
 //! ).unwrap();
 //! ```
 //!
-//! # 异步示例
+//! # Async example
 //!
 //! ```rust,no_run
 //! use mvsep_api_tester::file_transfer;
@@ -47,41 +47,41 @@
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let client = reqwest::Client::new();
 //!
-//!     // 异步上传
+//!     // Asynchronous upload
 //!     let hash = file_transfer::upload_file_async(
 //!         &client,
 //!         "https://api.mvsep.com/upload",
 //!         Path::new("./song.mp3"),
-//!         vec![("api_token", "your-token".to_string())],
+//!         vec![("api_token".to_string(), "your-token".to_string())],
 //!         None,
-//!         |p| println!("上传: {:.1}%", p.percent),
+//!         |p| println!("Upload: {:.1}%", p.percent),
 //!     ).await?;
-//!     println!("任务 Hash: {}", hash);
+//!     println!("Task hash: {}", hash);
 //!
-//!     // 异步下载（支持断点续传）
+//!     // Asynchronous download with resume support
 //!     file_transfer::download_file_async(
 //!         &client,
 //!         "https://api.mvsep.com/download/file.wav",
 //!         Path::new("./output.wav"),
 //!         "remote_file.wav",
 //!         None,
-//!         |p| println!("下载: {:.1}%", p.percent),
+//!         |p| println!("Download: {:.1}%", p.percent),
 //!     ).await?;
 //!
 //!     Ok(())
 //! }
 //! ```
 //!
-//! # 模块概览
+//! # Module overview
 //!
-//! | 模块 | 说明 |
+//! | Module | Description |
 //! |------|------|
-//! | [`db`] | 数据库层，含三个数据库的访问和迁移 |
-//! | [`db::tasks_db`] | 任务数据库（独立 SQLite） |
-//! | [`db::user_config`] | 用户配置 KV 存储 |
-//! | [`db::repositories`] | 数据访问层（行类型 + CRUD） |
-//! | [`file_transfer`] | 文件传输（流式上传/下载、续传、进度回调） |
-//! | [`utils`] | 路径、控制台等工具函数 |
+//! | [`db`] | Database access and migrations for the three databases |
+//! | [`db::tasks_db`] | Task database (separate SQLite database) |
+//! | [`db::user_config`] | User configuration key-value storage |
+//! | [`db::repositories`] | Data access layer (row types and CRUD operations) |
+//! | [`file_transfer`] | File transfers (streaming uploads/downloads, resume, progress callbacks) |
+//! | [`utils`] | Path and console utilities |
 
 pub mod db;
 pub mod file_transfer;
