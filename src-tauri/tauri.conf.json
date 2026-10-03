@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "MVSEP - 音乐分离工具",
+        "title": "MVSEP - Music Separation Tool",
         "width": 1100,
         "height": 750,
         "minWidth": 900,

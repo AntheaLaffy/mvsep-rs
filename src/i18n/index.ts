@@ -3,6 +3,7 @@ import { logger } from '../app/utils/logger';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
 import ja from './locales/ja.json';
+import { detectLocale } from './detect';
 
 export type Locale = 'en' | 'zh-CN' | 'ja';
 
@@ -97,19 +98,18 @@ export async function initLocale(): Promise<Locale> {
     return saved;
   }
   
-  const browserLang = navigator.language;
-  logger.info(`[I18N] No saved locale, using browser language: "${browserLang}"`);
-  
-  if (browserLang.startsWith('zh')) {
-    currentLocale = 'zh-CN';
-  } else if (browserLang.startsWith('ja')) {
-    currentLocale = 'ja';
-  } else {
-    currentLocale = 'en';
+  let systemLanguage: string | null = null;
+  try {
+    systemLanguage = await invoke<string | null>('system_locale');
+  } catch (error) {
+    logger.info(`[I18N] System locale unavailable: ${String(error)}`);
   }
+  const language = systemLanguage ?? navigator.language;
+  logger.info(`[I18N] No saved locale, using detected language: "${language}"`);
+  currentLocale = detectLocale(language);
   
   document.documentElement.lang = currentLocale;
-  logger.info(`[I18N] ====== Locale initialized to "${currentLocale}" (browser default) ======`);
+  logger.info(`[I18N] ====== Locale initialized to "${currentLocale}" (system default) ======`);
   return currentLocale;
 }
 

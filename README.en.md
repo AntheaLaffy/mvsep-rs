@@ -9,6 +9,8 @@ MVSEP desktop client for separating music into vocal, accompaniment, drums, bass
 
 Languages: [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
+The interface supports English, Chinese and Japanese. On first launch, the app follows the system locale (`LC_ALL`, then `LC_MESSAGES`, then `LANG`); if these are unset, it uses the WebView language. Chinese and Japanese locales select their respective translations; all other locales, including `C` and `POSIX`, default to English. A language selected in Settings takes precedence on subsequent launches.
+
 ## Features
 
 ### User Features

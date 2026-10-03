@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
 mod web_db;
+mod system_locale;
 
 // ============== 配置相关 ==============
 
@@ -3382,6 +3383,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            system_locale::system_locale,
             load_config,
             save_config,
             resolve_path,
