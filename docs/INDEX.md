@@ -9,14 +9,30 @@
 - [High Confidence Sources](references/high-confidence-sources.md): 资料查询优先级和官方文档入口。
 - [Backend Rewrite Architecture](architecture/backend-rewrite.md): 渐进替换架构、接口缝合点、数据流和质量门。
 - [ADR 0001](adr/0001-backend-rewrite-facade.md): 选择 Tauri command facade 后的 `AppBackend` 作为迁移 seam 的决策记录。
-- [Rewrite Skill](../skills/mvsep-rs-rewrite/SKILL.md): 迁移总入口和批次路由。
-- [Batch Writer Skill](../skills/mvsep-rs-batch-writer/SKILL.md): 单批次实现角色约束。
-- [Review Gate Skill](../skills/mvsep-rs-review-gate/SKILL.md): 独立审查角色约束。
+- [API Contract Skill](../skills/mvsep-api-contract/SKILL.md): Endpoint integration, response parsing, transfers, and English API documentation.
+- [Language Validation Skill](../skills/mvsep-i18n-validation/SKILL.md): Startup locale selection, saved preferences, and visible translations.
+- [AppImage Release Skill](../skills/mvsep-appimage-release/SKILL.md): Packaging, artifact validation, and catalog acceptance.
 - [Domain Context](../CONTEXT.md): 项目术语表。
 - [Working Notes](../Note.md): 视觉、人体工学、工程风格和协作约束。
 - [Rewrite Status](../manifest/rewrite-status.yaml): 迁移批次状态的机器可读记录。
 - [Rewrite Records](../rewrite-records/README.md): 非显然迁移经验和资料借鉴边界记录。
 - [Review Reports](../reviews/README.md): 多智能体审查报告入口。
+
+## Reusable Skills
+
+These existing skills are copied into the repository with their supporting files and original attribution. Use them for the relevant task; project-specific skills above add MVSEP context.
+
+| Task | Skill |
+|---|---|
+| Current library and CLI documentation | [find-docs](../skills/find-docs/SKILL.md) |
+| Crashes, memory errors, intermittent failures | [debugging](../skills/debugging/SKILL.md) |
+| Regression tests and test strategy | [testing](../skills/testing/SKILL.md) |
+| Formatters and lint tooling | [code-quality-tooling](../skills/code-quality-tooling/SKILL.md) |
+| Change review | [code-review](../skills/code-review/SKILL.md) |
+| Commits, branches, pushes, recovery | [git-cli](../skills/git-cli/SKILL.md) |
+| README, comments, commit and PR explanations | [writing-for-readers](../skills/writing-for-readers/SKILL.md) |
+| GitHub Actions and build automation | [ci-cd](../skills/ci-cd/SKILL.md) |
+| Upstream issues and pull requests | [contributing-upstream](../skills/contributing-upstream/SKILL.md) |
 
 ## Local Source Anchors
 
@@ -28,7 +44,7 @@
 - `src/main.ts`: 当前前端状态、页面注册、渲染调度集中处。
 - `src/app/services/tasks.ts`: 前端任务轮询、下载、取消逻辑。
 - `src/app/render/`: HTML 字符串渲染层。
-- `doc/mvsep_api_endpoints.md`: 当前本地 MVSep API 端点资料。
+- [MVSep API Endpoint Reference](../doc/mvsep_api_endpoints.md): English endpoint reference captured on 2026-06-27.
 
 ## Required Baseline Checks
 
