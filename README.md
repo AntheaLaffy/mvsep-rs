@@ -32,15 +32,9 @@ The interface supports English, Chinese and Japanese. On first launch, the app f
 ### Arch Linux / Manjaro (AUR)
 
 ```bash
-# Prebuilt binary version (recommended, fast installation)
 paru -S mvsep-gui-bin
 # or
 yay -S mvsep-gui-bin
-
-# Source build version (requires Rust and Node.js)
-paru -S mvsep-gui
-# or
-yay -S mvsep-gui
 ```
 
 ### Windows

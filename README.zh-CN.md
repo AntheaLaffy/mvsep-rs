@@ -32,15 +32,9 @@ MVSEP 桌面客户端，用于将音乐分离为人声、伴奏、鼓点、贝�
 ### Arch Linux / Manjaro (AUR)
 
 ```bash
-# 预编译二进制版本（推荐，快速安装）
 paru -S mvsep-gui-bin
 # 或
 yay -S mvsep-gui-bin
-
-# 源码构建版本（需要 Rust 和 Node.js）
-paru -S mvsep-gui
-# 或
-yay -S mvsep-gui
 ```
 
 ### Windows

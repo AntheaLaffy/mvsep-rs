@@ -30,15 +30,9 @@ MVSEP デスクトップクライアント。音楽をボーカル、伴奏、�
 ### Arch Linux / Manjaro (AUR)
 
 ```bash
-# プリビルドバイナリ版（推奨、高速インストール）
 paru -S mvsep-gui-bin
 # または
 yay -S mvsep-gui-bin
-
-# ソースビルド版（Rust と Node.js が必要）
-paru -S mvsep-gui
-# または
-yay -S mvsep-gui
 ```
 
 ### Windows
