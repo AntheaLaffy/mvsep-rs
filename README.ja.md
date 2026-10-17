@@ -35,6 +35,8 @@ paru -S mvsep-gui-bin
 yay -S mvsep-gui-bin
 ```
 
+旧 `mvsep-gui` ソースビルドパッケージは終了しました。`mvsep-gui-bin` が自動的に置き換えます。
+
 ### Windows
 
 `MVSEP_1.3.0_x64-setup.exe` をダウンロードしてインストーラーを実行します。

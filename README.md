@@ -37,6 +37,8 @@ paru -S mvsep-gui-bin
 yay -S mvsep-gui-bin
 ```
 
+The previous `mvsep-gui` source-build package is discontinued; `mvsep-gui-bin` replaces it automatically.
+
 ### Windows
 
 Download `MVSEP_1.3.0_x64-setup.exe` and run the installer.

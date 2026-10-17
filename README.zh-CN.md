@@ -37,6 +37,8 @@ paru -S mvsep-gui-bin
 yay -S mvsep-gui-bin
 ```
 
+原 `mvsep-gui` 源码构建包已停止维护，`mvsep-gui-bin` 会自动替换它。
+
 ### Windows
 
 下载 `MVSEP_1.3.0_x64-setup.exe`，运行安装程序即可。
