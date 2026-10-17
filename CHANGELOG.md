@@ -1,5 +1,10 @@
 # Changelog
 
+## Desktop 1.3.1
+
+- Bundle a `.DirIcon` that actually resolves: Tauri CLI 2.12.3 creates it as a relative symlink, whereas 2.10.1 pointed it at an absolute path on the build machine, which AppImageHub rejected with `FATAL: .DirIcon is missing`.
+- Drop the `bundle.linux.appimage.files` `.DirIcon` entry: custom files land under the AppDir's `usr/` tree, so it never reached the root the validator looks at.
+
 ## Unreleased
 
 - Discontinue the AUR source-build package in favor of the prebuilt `mvsep-gui-bin` AppImage package.
