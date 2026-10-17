@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Discontinue the AUR source-build package in favor of the prebuilt `mvsep-gui-bin` AppImage package.
+- Skip CI for documentation-only changes.
+
 ## Desktop 1.3.0 / API crate 0.1.1
 
 - Add optional desktop notifications when a separation task finishes or fails while the app is in the background, with a settings toggle and a test action.
