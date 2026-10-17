@@ -38,6 +38,7 @@ export interface DomEventsContext {
   saveSettings(): Promise<void>;
   toggleTokenVisibility(): void;
   showApiTokenHelp(): void;
+  sendTestNotification(): void;
   switchLogType(type: 'frontend' | 'backend'): Promise<void>;
   clearLogs(): void;
   exportLogs(): void;

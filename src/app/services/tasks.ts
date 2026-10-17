@@ -1,4 +1,5 @@
 import { backendGateway } from '../backend/gateway';
+import { notifyTaskFinished } from './notifications';
 import type { TaskStatusPayload } from '../types';
 import type { TaskServiceContext } from '../contracts/app-context';
 
@@ -93,6 +94,7 @@ export async function pollTaskStatus(app: TaskServiceContext, hash: string): Pro
 
     if (isTerminal && completionPersisted) {
       await app.saveActiveTasks(true);
+      if (task) notifyTaskFinished(app, task);
     } else if (!isTerminal) {
       void app.saveActiveTasks().catch(() => undefined);
     }

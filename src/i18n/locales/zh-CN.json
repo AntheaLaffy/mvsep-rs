@@ -127,7 +127,21 @@
     "apiKeyRequiredForSubmit": "请先在设置中填写 API Key，再创建分离任务。",
     "placeholderTokenNotAllowed": "demo-key 仅用于占位，请填写你自己的 API Key。",
     "cache": "缓存",
-    "algorithmCachePath": "算法缓存文件路径"
+    "algorithmCachePath": "算法缓存文件路径",
+    "notifications": "通知",
+    "notifyOnTaskComplete": "任务完成时发送桌面通知",
+    "notifyOnTaskCompleteHint": "应用在后台时，任务完成或失败会弹出系统通知。",
+    "testNotification": "发送测试通知",
+    "testNotificationSent": "测试通知已发送。",
+    "testNotificationFailed": "测试通知发送失败，请检查系统通知设置。"
+  },
+  "notification": {
+    "taskDoneTitle": "分离完成",
+    "taskDoneBody": "处理完成，结果已就绪。",
+    "taskFailedTitle": "分离失败",
+    "taskFailedBody": "处理失败。",
+    "testTitle": "MVSEP 通知已正常工作",
+    "testBody": "这是一条测试桌面通知。"
   },
   "appearance": {
     "title": "外观",

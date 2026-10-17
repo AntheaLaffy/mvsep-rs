@@ -122,7 +122,21 @@
     "connectionSucceeded": "接続テストに成功しました。",
     "connectionFailed": "接続テストに失敗しました。Token、API URL、プロキシを確認してください。",
     "cache": "キャッシュ",
-    "algorithmCachePath": "アルゴリズムキャッシュファイルパス"
+    "algorithmCachePath": "アルゴリズムキャッシュファイルパス",
+    "notifications": "通知",
+    "notifyOnTaskComplete": "タスク完了時にデスクトップ通知を送る",
+    "notifyOnTaskCompleteHint": "アプリがバックグラウンドにあるとき、タスクの完了または失敗をシステム通知で知らせます。",
+    "testNotification": "テスト通知を送信",
+    "testNotificationSent": "テスト通知を送信しました。",
+    "testNotificationFailed": "テスト通知を送信できませんでした。システムの通知設定を確認してください。"
+  },
+  "notification": {
+    "taskDoneTitle": "分離が完了しました",
+    "taskDoneBody": "処理が完了し、結果をダウンロードできます。",
+    "taskFailedTitle": "分離に失敗しました",
+    "taskFailedBody": "処理に失敗しました。",
+    "testTitle": "MVSEP の通知は正常に動作しています",
+    "testBody": "これはテスト用のデスクトップ通知です。"
   },
   "appearance": {
     "title": "外観",

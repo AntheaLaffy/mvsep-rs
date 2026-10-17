@@ -9,6 +9,7 @@ export interface Config {
   output_format: number | null;
   poll_interval: number | null;
   algorithm_auto_refresh_days: number | null;
+  notify_on_task_complete: boolean | null;
 }
 
 export interface Task {

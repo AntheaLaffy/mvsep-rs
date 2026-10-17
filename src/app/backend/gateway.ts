@@ -2,7 +2,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getVersion } from '@tauri-apps/api/app';
 import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification as sendDesktopNotification,
+} from '@tauri-apps/plugin-notification';
 import { openPath, revealItemInDir, openUrl as openExternalUrl } from '@tauri-apps/plugin-opener';
 import type {
   AlgorithmDetails,
@@ -166,5 +172,17 @@ export const backendGateway = {
 
   onFileDragDrop(handler: (event: DragDropEvent) => void): Promise<Unlisten> {
     return getCurrentWebview().onDragDropEvent((event) => handler(event.payload));
+  },
+
+  async sendNotification(args: { title: string; body: string }): Promise<boolean> {
+    const granted = await isPermissionGranted();
+    const permission = granted ? 'granted' : await requestPermission();
+    if (permission !== 'granted') return false;
+    sendDesktopNotification({ title: args.title, body: args.body });
+    return true;
+  },
+
+  isMainWindowFocused(): Promise<boolean> {
+    return getCurrentWindow().isFocused();
   },
 };

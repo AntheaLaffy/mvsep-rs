@@ -30,6 +30,7 @@ pub struct Config {
     pub output_format: Option<i32>,
     pub poll_interval: Option<i32>,
     pub algorithm_auto_refresh_days: Option<i32>,
+    pub notify_on_task_complete: Option<bool>,
 }
 
 impl Default for Config {
@@ -45,6 +46,7 @@ impl Default for Config {
             output_format: Some(1),
             poll_interval: Some(5),
             algorithm_auto_refresh_days: Some(15),
+            notify_on_task_complete: Some(true),
         }
     }
 }
@@ -663,6 +665,9 @@ fn merge_config(base: Config, patch: Config) -> Config {
         algorithm_auto_refresh_days: patch
             .algorithm_auto_refresh_days
             .or(base.algorithm_auto_refresh_days),
+        notify_on_task_complete: patch
+            .notify_on_task_complete
+            .or(base.notify_on_task_complete),
     }
 }
 
@@ -3362,6 +3367,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -3943,6 +3949,7 @@ mod tests {
                     output_format: None,
                     poll_interval: None,
                     algorithm_auto_refresh_days: None,
+                    notify_on_task_complete: None,
                 },
             )
             .unwrap();
@@ -3953,6 +3960,7 @@ mod tests {
         assert_eq!(reloaded.api_url.as_deref(), Some("https://mvsep.com"));
         assert_eq!(reloaded.output_dir.as_deref(), Some("./output"));
         assert_eq!(reloaded.output_format, Some(1));
+        assert_eq!(reloaded.notify_on_task_complete, Some(true));
         fs::remove_dir_all(root).unwrap();
     }
 

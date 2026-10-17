@@ -34,6 +34,7 @@ import {
   startPolling as startPollingTask,
   stopPolling as stopPollingTask,
 } from './app/services/tasks';
+import { notifyTaskFinished, sendTestNotification as sendDesktopTestNotification } from './app/services/notifications';
 import type { DomEventsContext, TaskServiceContext } from './app/contracts/app-context';
 import type {
   AlgorithmDetails,
@@ -462,9 +463,11 @@ class App {
     const mirrorSelect = document.getElementById('mirror-select') as HTMLSelectElement | null;
     const outputFormatSelect = document.getElementById('settings-output-format-select') as HTMLSelectElement | null;
     const algorithmAutoRefreshDaysInput = document.getElementById('algo-auto-refresh-days-input') as HTMLInputElement | null;
+    const notifyOnTaskCompleteCheckbox = document.getElementById('notify-on-task-complete-checkbox') as HTMLInputElement | null;
 
     if (!tokenInput || !apiUrlInput || !outputDirInput || !pollIntervalInput || !proxyModeSelect
-      || !proxyHostInput || !proxyPortInput || !mirrorSelect || !outputFormatSelect || !algorithmAutoRefreshDaysInput) {
+      || !proxyHostInput || !proxyPortInput || !mirrorSelect || !outputFormatSelect || !algorithmAutoRefreshDaysInput
+      || !notifyOnTaskCompleteCheckbox) {
       return null;
     }
 
@@ -488,6 +491,7 @@ class App {
       mirror: mirrorSelect.value || 'main',
       output_format: outputFormatSelect.value ? parseInt(outputFormatSelect.value, 10) : 1,
       algorithm_auto_refresh_days: normalizedAutoRefreshDays,
+      notify_on_task_complete: notifyOnTaskCompleteCheckbox.checked,
     };
 
     return {
@@ -1272,6 +1276,9 @@ class App {
         this.config.api_url = this.getApiUrlByMirror(this.config.mirror);
       }
       this.config.algorithm_auto_refresh_days = this.normalizeAlgorithmAutoRefreshDays(this.config.algorithm_auto_refresh_days);
+      if (this.config.notify_on_task_complete === null || this.config.notify_on_task_complete === undefined) {
+        this.config.notify_on_task_complete = true;
+      }
       this.selectedFormat = this.config.output_format ?? 1;
     } catch (e) {
       console.error('Failed to load config:', e);
@@ -1286,6 +1293,7 @@ class App {
         output_format: 1,
         poll_interval: 5,
         algorithm_auto_refresh_days: this.defaultAlgorithmAutoRefreshDays,
+        notify_on_task_complete: true,
       };
       this.selectedFormat = 1;
     }
@@ -1770,6 +1778,7 @@ class App {
         }
         if (completionPersisted) {
           await this.saveActiveTasks(true);
+          notifyTaskFinished(this as unknown as TaskServiceContext, task);
         }
         throw new Error(task.error);
       }
@@ -2159,6 +2168,16 @@ class App {
     this.showTransientNotice(t('settings.apiKeyHelpText'), 'info', 6200);
     this.setStatusBanner('running', t('settings.apiKeyHelpShown'), { autoHideMs: 2600, showLogsShortcut: false });
     void this.sendDebugLog('INFO', 'api token help requested');
+  }
+
+  async sendTestNotification() {
+    const sent = await sendDesktopTestNotification();
+    this.showTransientNotice(
+      sent ? t('settings.testNotificationSent') : t('settings.testNotificationFailed'),
+      sent ? 'info' : 'warn',
+      3600,
+    );
+    void this.sendDebugLog(sent ? 'INFO' : 'WARN', `test desktop notification requested: sent=${sent}`);
   }
 
   private normalizePollInterval(value: number | null | undefined): number {

@@ -127,7 +127,21 @@
     "apiKeyRequiredForSubmit": "Please set your API Key in Settings before creating tasks.",
     "placeholderTokenNotAllowed": "The demo key is placeholder-only. Please use your own API Key.",
     "cache": "Cache",
-    "algorithmCachePath": "Algorithm Cache File Path"
+    "algorithmCachePath": "Algorithm Cache File Path",
+    "notifications": "Notifications",
+    "notifyOnTaskComplete": "Notify when a separation task finishes",
+    "notifyOnTaskCompleteHint": "Shows a desktop notification when a task completes or fails while the app is in the background.",
+    "testNotification": "Send Test Notification",
+    "testNotificationSent": "Test notification sent.",
+    "testNotificationFailed": "Could not send the test notification. Check the system notification settings."
+  },
+  "notification": {
+    "taskDoneTitle": "Separation complete",
+    "taskDoneBody": "processing finished. The result is ready.",
+    "taskFailedTitle": "Separation failed",
+    "taskFailedBody": "processing failed.",
+    "testTitle": "MVSEP notifications are working",
+    "testBody": "This is a test desktop notification."
   },
   "appearance": {
     "title": "Appearance",

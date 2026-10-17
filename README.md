@@ -19,6 +19,7 @@ The interface supports English, Chinese and Japanese. On first launch, the app f
 - **Task Management** - Real-time separation progress, support interrupt, download, delete tasks
 - **Multiple Algorithms** - Support multiple separation algorithms and models
 - **Resumable Downloads** - Click download again to resume from interruption
+- **Desktop Notifications** - Optional system notification when a task finishes in the background
 - **Proxy Support** - System proxy, manual proxy, or no proxy modes
 
 ### Technical Features
@@ -44,20 +45,20 @@ yay -S mvsep-gui
 
 ### Windows
 
-Download `MVSEP_1.2.0_x64-setup.exe` and run the installer.
+Download `MVSEP_1.3.0_x64-setup.exe` and run the installer.
 
 ### Debian/Ubuntu
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
-sudo dpkg -i MVSEP_1.2.0_amd64.deb
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP_1.3.0_amd64.deb
+sudo dpkg -i MVSEP_1.3.0_amd64.deb
 ```
 
 ### Fedora/RHEL
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
-sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP-1.3.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.3.0-1.x86_64.rpm
 ```
 
 ### Build from Source
@@ -138,6 +139,10 @@ No worries, the client supports **resumable downloads**. Just click download aga
 ### How to update algorithm list?
 
 Go to **Algorithms Page**, click "Get Latest Algorithms" to fetch from server.
+
+### Desktop notifications are not showing?
+
+Enable **Settings → Notifications** and click **Send Test Notification** first. On Windows, notifications only appear reliably for the installed build (the installer registers the app identity); development builds may be labelled as PowerShell. Also check that Windows notifications and Focus Assist are not blocking MVSEP.
 
 ## Developer Guide
 

@@ -1,8 +1,8 @@
 // LC_ALL overrides the category-specific locale, which overrides LANG.
-fn select_locale(mut read: impl FnMut(&str) -> Option<String>) -> Option<String> {
+fn select_locale(read: impl FnMut(&str) -> Option<String>) -> Option<String> {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
-        .filter_map(|key| read(key))
+        .filter_map(read)
         .find(|value| !value.trim().is_empty())
 }
 

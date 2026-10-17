@@ -85,6 +85,7 @@ export function handleDocumentClick(app: DomEventsContext, e: Event): void {
   if (target.closest('[data-action="go-api-key-settings"]')) app.goToApiKeySettings();
   if (target.closest('[data-action="toggle-token-visibility"]')) app.toggleTokenVisibility();
   if (target.closest('[data-action="show-api-help"]')) app.showApiTokenHelp();
+  if (target.closest('[data-action="test-notification"]')) app.sendTestNotification();
 
   if (target.closest('[data-action="switch-log-type"]')) {
     const type = target.closest('[data-action="switch-log-type"]')?.getAttribute('data-type') as 'frontend' | 'backend' | null;
@@ -338,6 +339,11 @@ export async function handleDocumentChange(app: DomEventsContext, e: Event): Pro
 
   if (target.id === 'settings-output-format-select' && app.config) {
     app.config.output_format = parseInt(target.value, 10);
+    app.scheduleSettingsAutoSave();
+  }
+
+  if (target.id === 'notify-on-task-complete-checkbox' && app.config) {
+    app.config.notify_on_task_complete = (target as HTMLInputElement).checked;
     app.scheduleSettingsAutoSave();
   }
 

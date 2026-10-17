@@ -140,6 +140,27 @@ export function renderSettingsPageHtml(args: RenderSettingsPageArgs): string {
         </div>
 
         <div class="card">
+          <h3 class="font-semibold text-text-primary mb-4">🔔 ${t('settings.notifications')}</h3>
+          <div class="space-y-4">
+            <label class="flex items-start gap-2 text-sm text-text-secondary">
+              <input
+                type="checkbox"
+                id="notify-on-task-complete-checkbox"
+                class="mt-1"
+                ${config?.notify_on_task_complete !== false ? 'checked' : ''}
+              />
+              <span>
+                <span class="block text-text-primary">${t('settings.notifyOnTaskComplete')}</span>
+                <span class="block text-xs text-text-muted">${t('settings.notifyOnTaskCompleteHint')}</span>
+              </span>
+            </label>
+            <button class="btn btn-secondary" type="button" data-action="test-notification">
+              ${t('settings.testNotification')}
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
           <h3 class="font-semibold text-text-primary mb-4">🌐 ${t('settings.proxy')}</h3>
           <div class="space-y-4">
             <div>

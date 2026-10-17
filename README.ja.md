@@ -17,6 +17,7 @@ MVSEP デスクトップクライアント。音楽をボーカル、伴奏、�
 - **タスク管理** - リアルタイムで分離進捗を確認、中断・ダウンロード・削除に対応
 - **複数アルゴリズム** - 複数の分離アルゴリズムとモデルに対応
 - **再開可能なダウンロード** - 中断後も再びダウンロードボタンをクリックして続行可能
+- **デスクトップ通知** - バックグラウンドでタスクが完了したときにシステム通知を表示（任意）
 - **プロキシサポート** - システムプロキシ、手動プロキシ、プロキシなしの三つのモード
 
 ### 技術的特徴
@@ -42,20 +43,20 @@ yay -S mvsep-gui
 
 ### Windows
 
-`MVSEP_1.2.0_x64-setup.exe` をダウンロードしてインストーラーを実行します。
+`MVSEP_1.3.0_x64-setup.exe` をダウンロードしてインストーラーを実行します。
 
 ### Debian/Ubuntu
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
-sudo dpkg -i MVSEP_1.2.0_amd64.deb
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP_1.3.0_amd64.deb
+sudo dpkg -i MVSEP_1.3.0_amd64.deb
 ```
 
 ### Fedora/RHEL
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
-sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP-1.3.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.3.0-1.x86_64.rpm
 ```
 
 ### ソースからビルド
@@ -136,6 +137,10 @@ cargo build --release
 ### アルゴリズムリストを更新するには？
 
 **アルゴリズムページ**に移動し、「最新アルゴリズム情報を取得」をクリックしてサーバーから取得します。
+
+### デスクトップ通知が表示されない場合は？
+
+「設定 → 通知」で有効にしてから「テスト通知を送信」で確認してください。Windows ではインストール版（インストーラーがアプリ識別子を登録します）でのみ安定して表示され、開発ビルドでは PowerShell として表示されることがあります。Windows の通知と集中モードで MVSEP がブロックされていないことも確認してください。
 
 ## 開発者ガイド
 

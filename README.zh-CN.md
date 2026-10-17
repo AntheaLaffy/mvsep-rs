@@ -19,6 +19,7 @@ MVSEP 桌面客户端，用于将音乐分离为人声、伴奏、鼓点、贝�
 - **任务管理** - 实时查看分离进度，支持中断、下载、删除任务
 - **多种算法** - 支持多种分离算法和模型可选
 - **断点续传** - 下载中断后再次点击即可继续，无需重新开始
+- **桌面通知** - 任务在后台完成时可选弹出系统通知
 - **代理支持** - 支持系统代理、手动代理或无代理
 
 ### 技术特性
@@ -44,20 +45,20 @@ yay -S mvsep-gui
 
 ### Windows
 
-下载 `MVSEP_1.2.0_x64-setup.exe`，运行安装程序即可。
+下载 `MVSEP_1.3.0_x64-setup.exe`，运行安装程序即可。
 
 ### Debian/Ubuntu
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP_1.2.0_amd64.deb
-sudo dpkg -i MVSEP_1.2.0_amd64.deb
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP_1.3.0_amd64.deb
+sudo dpkg -i MVSEP_1.3.0_amd64.deb
 ```
 
 ### Fedora/RHEL
 
 ```bash
-wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.2.0/MVSEP-1.2.0-1.x86_64.rpm
-sudo dnf install MVSEP-1.2.0-1.x86_64.rpm
+wget https://github.com/AntheaLaffy/mvsep-rs/releases/download/v1.3.0/MVSEP-1.3.0-1.x86_64.rpm
+sudo dnf install MVSEP-1.3.0-1.x86_64.rpm
 ```
 
 ### 从源码构建
@@ -138,6 +139,10 @@ cargo build --release
 ### 如何更新算法列表？
 
 进入 **算法页**，点击「获取最新算法信息」从服务器拉取最新算法。
+
+### 收不到桌面通知怎么办？
+
+先在「设置 → 通知」中开启开关，并点击「发送测试通知」验证。Windows 上只有安装版（安装程序会注册应用标识）能稳定显示通知，开发模式可能显示为 PowerShell；同时请确认系统通知和专注助手没有拦截 MVSEP。
 
 ## 开发者指南
 
