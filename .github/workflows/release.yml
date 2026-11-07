@@ -81,6 +81,7 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v1
         env:
+          LINUXDEPLOY_EXCLUDED_LIBRARIES: libwayland-client.so.0
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
@@ -89,6 +90,27 @@ jobs:
             MVSEP desktop client v__VERSION__.
 
             Download the installer for your operating system from the assets below.
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Check Linux AppImage compatibility
+        if: matrix.platform == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          artifact_dir=src-tauri/target/release/bundle/appimage
+          version=$(node -p 'require("./package.json").version')
+          test -s "$artifact_dir/MVSEP_${version}_amd64.AppImage"
+          bash scripts/check-appimage-compat.sh "$artifact_dir/MVSEP.AppDir"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish validated release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
+          gh release edit "v$version" --draft=false --latest
